@@ -1,0 +1,47 @@
+# Dependencies (Node.js & Python dependencies)
+node_modules/
+.pnpm-store/
+.venv/
+venv/
+ENV/
+env/
+
+# Production Build Artifacts & Output
+dist/
+dist-ssr/
+build/
+coverage/
+*.local
+
+# Environment Variables & Secrets (Prevent API Key leaks)
+.env
+.env.*
+!.env.example
+options.json
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Home Assistant Temporary & Dynamic Cache
+/data/logs/
+/data/audio_cache/
+/data/backups/
+/data/dynamic_modules/
+
+# Logs & Temporary Files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Operating System & IDE Configs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+

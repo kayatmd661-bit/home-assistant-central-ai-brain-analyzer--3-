@@ -1,0 +1,59 @@
+name: "Auto-Evolving Edge-AI Master Hub"
+description: "Zero-Loss Auto-Updating Edge-AI Hub with Native SUPERVISOR_TOKEN Auto-Discovery, Full Admin Access, Persistent /data/ JSON-Store, Multi-Room Spatial Voice Brain & 21 Dashboards."
+version: "3.14.0"
+slug: "edge_ai_master_hub"
+url: "https://github.com/kayatmd5/edge-ai-master-hub"
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+startup: application
+boot: auto
+init: false
+ingress: true
+ingress_port: 8099
+ingress_entry: "/"
+panel_icon: "mdi:brain"
+panel_title: "Edge-AI Master Hub"
+homeassistant_api: true
+hassio_api: true
+hassio_role: "admin"
+full_access: true
+privileged:
+  - "SYS_ADMIN"
+  - "NET_ADMIN"
+  - "SYS_RAWIO"
+  - "SYS_RESOURCE"
+  - "SYS_TIME"
+  - "SYS_NICE"
+  - "DAC_READ_SEARCH"
+  - "IPC_LOCK"
+  - "NET_RAW"
+  - "SYS_MODULE"
+  - "SYS_PTRACE"
+host_network: true
+map:
+  - "share:rw"
+  - "config:rw"
+  - "ssl:rw"
+  - "media:rw"
+options:
+  ha_url: ""
+  ha_api_token: ""
+  gemini_api_key: ""
+  audio_voice_persona: "NATURAL_BENGALI_FEMALE"
+  offline_tts_mode: "HIGH_DEF_SYNTHESIS"
+  theme_sync: true
+  wake_word_active: true
+  auto_adapt_mobile: true
+schema:
+  ha_url: "str?"
+  ha_api_token: "password?"
+  gemini_api_key: "password?"
+  audio_voice_persona: "list(NATURAL_BENGALI_FEMALE|PUCK_FEMALE|CHARON_MALE)"
+  offline_tts_mode: "list(HIGH_DEF_SYNTHESIS|NATIVE_FORMANT)"
+  theme_sync: "bool"
+  wake_word_active: "bool"
+  auto_adapt_mobile: "bool"

@@ -1,0 +1,8 @@
+{
+  "name": "Auto-Evolving Edge-AI Master Hub for Home Assistant",
+  "description": "Autonomous, self-evolving, multi-modal Edge-AI Master Controller for Home Assistant with custom Lovelace floating voice card, on-page Bengali/English audio explainer guide, multi-key Gemini failover pool, visual node canvas, active hardware feasibility audit, full lifecycle rule CRUD, facial recognition visitor dialogue, and auto-migrating API engine.",
+  "requestFramePermissions": ["microphone", "camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
+

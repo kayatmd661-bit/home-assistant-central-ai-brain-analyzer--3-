@@ -1,0 +1,22 @@
+blueprint:
+  name: "Edge-AI Multi-Drive Storage Failover Notifier"
+  description: "Alerts administrator whenever an external NVMe/SATA SSD is disconnected or full, and confirms zero-loss failover to internal storage."
+  domain: automation
+  input:
+    notify_service:
+      name: "Admin Notification Target"
+      selector:
+        target:
+          entity:
+            domain: notify
+
+trigger:
+  - platform: event
+    event_type: "edge_ai_master_storage_failover"
+
+action:
+  - service: notify.notify
+    target: !input notify_service
+    data:
+      title: "💾 স্টোরেজ ফেইলওভার নোটিফিকেশন"
+      message: "প্রাথমিক ড্রাইভ বিচ্ছিন্ন হওয়ায় সমস্ত ডেটা ও মডেল ব্যাকআপ ইন্টারনাল /data/ পার্টিশনে সফলভাবে স্থানান্তর করা হয়েছে।"

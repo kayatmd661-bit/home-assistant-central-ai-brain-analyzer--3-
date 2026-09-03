@@ -1,0 +1,25 @@
+blueprint:
+  name: "Edge-AI Bengali Natural Voice Smart Assistant"
+  description: "Captures natural Bengali spoken voice commands, runs local NumPy intent parsing, and executes Home Assistant device actions."
+  domain: automation
+  input:
+    voice_trigger_event:
+      name: "Voice Trigger Event"
+      default: "edge_ai_master_voice_broadcast"
+    target_speakers:
+      name: "Smart Speakers"
+      selector:
+        target:
+          entity:
+            domain: media_player
+
+trigger:
+  - platform: event
+    event_type: !input voice_trigger_event
+
+action:
+  - service: media_player.play_media
+    target: !input target_speakers
+    data:
+      media_content_type: "music"
+      media_content_id: "{{ trigger.event.data.audio_url }}"

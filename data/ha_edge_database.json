@@ -1,0 +1,1375 @@
+{
+  "version": "2026.8.5-production",
+  "savedAt": "2026-09-03T08:02:15.180Z",
+  "savedRules": [
+    {
+      "id": "rule-01",
+      "name": "Evening Living Room Ambient Fade",
+      "nameBn": "সন্ধ্যায় ড্রয়িং রুমের লাইট মৃদু উজ্জ্বলতায় চালু",
+      "rawIntent": "সন্ধ্যা ৬টায় লিভিং রুমের লাইট ৪০% ব্রাইটনেসে চালু করো এবং এসি ২৬ ডিগ্রিতে রাখো",
+      "triggerType": "TEMPORAL",
+      "triggerDetails": "Daily at 18:00 (Sunset Sync)",
+      "actions": [
+        {
+          "entity_id": "light.drawing_room",
+          "service": "turn_on",
+          "params": {
+            "brightness_pct": 40,
+            "transition": 5
+          }
+        },
+        {
+          "entity_id": "climate.ac_master_bed",
+          "service": "set_temperature",
+          "params": {
+            "temperature": 26
+          }
+        }
+      ],
+      "enabled": true,
+      "feasibilityScore": 100,
+      "matchedEntities": [
+        "light.drawing_room",
+        "climate.ac_master_bed"
+      ],
+      "createdAt": "2026-08-16 19:30:00",
+      "lastTriggered": "2026-08-17 18:00:00",
+      "executionCount": 14
+    },
+    {
+      "id": "rule-02",
+      "name": "Front Gate Security Motion Alert & PTZ Auto-Track",
+      "nameBn": "সামনের গেটে মোশন হলে ক্যামেরা ঘোরানো এবং স্পিকারে ওয়ার্নিং",
+      "rawIntent": "গেটে কেউ আসলে ক্যামেরা তার দিকে ঘুরিয়ে স্পিকারে জিজ্ঞেস করো কে এসেছে",
+      "triggerType": "VISION",
+      "triggerDetails": "YOLOv8 Person Detection on camera.front_gate",
+      "actions": [
+        {
+          "entity_id": "camera.front_gate",
+          "service": "ptz_track_person",
+          "params": {
+            "auto_center": true
+          }
+        },
+        {
+          "entity_id": "media_player.door_speaker",
+          "service": "speak",
+          "params": {
+            "message": "হ্যালো! আপনি কার সাথে দেখা করতে এসেছেন?"
+          }
+        }
+      ],
+      "enabled": true,
+      "feasibilityScore": 95,
+      "matchedEntities": [
+        "camera.front_gate",
+        "media_player.door_speaker"
+      ],
+      "createdAt": "2026-08-15 14:12:00",
+      "lastTriggered": "2026-08-17 12:45:00",
+      "executionCount": 32
+    },
+    {
+      "id": "rule-03",
+      "name": "Night Energy Saver Kill-Switch",
+      "nameBn": "রাত ১টায় অপ্রয়োজনীয় ফ্যান ও লাইট বন্ধ করা",
+      "rawIntent": "রাত ১টায় যদি ড্রয়িং রুমে কেউ না থাকে তাহলে সব লাইট ও ফ্যান বন্ধ করো",
+      "triggerType": "STATE",
+      "triggerDetails": "Time == 01:00 AND binary_sensor.drawing_room_motion == OFF for 15m",
+      "actions": [
+        {
+          "entity_id": "light.drawing_room",
+          "service": "turn_off",
+          "params": {}
+        },
+        {
+          "entity_id": "fan.living_room",
+          "service": "turn_off",
+          "params": {}
+        }
+      ],
+      "enabled": true,
+      "feasibilityScore": 100,
+      "matchedEntities": [
+        "binary_sensor.drawing_room_motion",
+        "light.drawing_room",
+        "fan.living_room"
+      ],
+      "createdAt": "2026-08-14 09:00:00",
+      "lastTriggered": "2026-08-17 01:00:00",
+      "executionCount": 45
+    }
+  ],
+  "faceProfiles": [
+    {
+      "id": "face-01",
+      "name": "হুমায়ুন ভাই (Humayun Bhai)",
+      "role": "OWNER",
+      "confidence": 0.99,
+      "lastSeen": "আজ দুপুর ১২:৪৫",
+      "registeredAt": "2026-08-01",
+      "faceEmbeddingVector": [
+        0.12,
+        0.89,
+        -0.45,
+        0.67,
+        -0.11,
+        0.34
+      ],
+      "accessLevel": "FULL"
+    },
+    {
+      "id": "face-02",
+      "name": "তানভীর (Family Member)",
+      "role": "FAMILY",
+      "confidence": 0.96,
+      "lastSeen": "গতকাল রাত ৮:১০",
+      "registeredAt": "2026-08-05",
+      "faceEmbeddingVector": [
+        -0.32,
+        0.44,
+        0.78,
+        -0.15,
+        0.52,
+        -0.09
+      ],
+      "accessLevel": "FULL"
+    },
+    {
+      "id": "face-03",
+      "name": "কুরিয়ার ডেলিভারি পারসন (Regular Guest)",
+      "role": "GUEST",
+      "confidence": 0.88,
+      "lastSeen": "৩ দিন আগে",
+      "registeredAt": "2026-08-10",
+      "faceEmbeddingVector": [
+        0.45,
+        -0.22,
+        0.19,
+        0.81,
+        -0.63,
+        0.27
+      ],
+      "accessLevel": "NOTIFY_ONLY"
+    }
+  ],
+  "visitorInteractions": [
+    {
+      "id": "vis-101",
+      "timestamp": "2026-08-17 12:45:12",
+      "faceMatched": false,
+      "visitorUtterance": "আমি দারাজ থেকে পার্সেল নিয়ে এসেছি হুমায়ুন ভাইয়ের জন্য।",
+      "aiResponse": "Thank you. I have notified Humayun Bhai on his dashboard. Please place the parcel in the safe drop box.",
+      "aiResponseBn": "ধন্যবাদ। আমি হুমায়ুন ভাইয়ের ড্যাশবোর্ডে নোটিফিকেশন পাঠিয়েছি। অনুগ্রহ করে পার্সেলটি গেটের ড্রপ বক্সে রাখুন।",
+      "actionTaken": "NOTIFY_OWNER_OVERLAY",
+      "approved": true,
+      "cameraSnapshot": "snapshot_gate_101.jpg"
+    },
+    {
+      "id": "vis-102",
+      "timestamp": "2026-08-17 09:20:00",
+      "faceMatched": true,
+      "matchedName": "হুমায়ুন ভাই (Humayun Bhai)",
+      "visitorUtterance": "গেট খোলো",
+      "aiResponse": "Welcome home Humayun Bhai! Opening front gate and unlocking door.",
+      "aiResponseBn": "স্বাগতম হুমায়ুন ভাই! সামনের গেট খোলা হচ্ছে এবং দরজা আনলক করা হয়েছে।",
+      "actionTaken": "UNLOCK_FRONT_GATE",
+      "approved": true,
+      "cameraSnapshot": "snapshot_gate_owner.jpg"
+    }
+  ],
+  "roomProfiles": [
+    {
+      "id": "room-master-bed",
+      "name": "Master Bedroom (Admin Hub)",
+      "nameBn": "মাস্টার বেডরুম (মেইন অ্যাডমিন)",
+      "floor": "2nd Floor",
+      "icon": "Bed",
+      "color": "#8b5cf6",
+      "associatedEntities": [
+        "light.master_bed_ambient",
+        "climate.ac_master_bed",
+        "fan.master_bedroom",
+        "media_player.bedroom_speaker",
+        "binary_sensor.bedroom_motion",
+        "sensor.bedroom_temperature"
+      ],
+      "microphoneInputId": "mic_esphome_bed_satellite",
+      "speakerOutputId": "media_player.bedroom_speaker",
+      "wakeWordOverride": "Jarvis",
+      "isAdminRoom": true,
+      "accessScope": "MASTER_ADMIN",
+      "allowedCrossRoomPermissions": [
+        "room-living",
+        "room-kitchen",
+        "room-front-gate"
+      ],
+      "automationsCount": 1,
+      "automations": [
+        {
+          "id": "ra-03",
+          "roomId": "room-master-bed",
+          "name": "Sleep Comfort Routine",
+          "nameBn": "ঘুমের প্রস্তুতি রুটিন",
+          "voiceShortcut": "আমি ঘুমাবো লাইট অফ করো",
+          "triggerCondition": "Voice Trigger in Master Bedroom",
+          "actions": [
+            {
+              "entity_id": "light.master_bed_ambient",
+              "service": "turn_off",
+              "params": {}
+            },
+            {
+              "entity_id": "climate.ac_master_bed",
+              "service": "set_temperature",
+              "params": {
+                "temperature": 26
+              }
+            },
+            {
+              "entity_id": "fan.master_bedroom",
+              "service": "turn_on",
+              "params": {
+                "percentage": 50
+              }
+            }
+          ],
+          "enabled": true
+        }
+      ],
+      "createdAt": "2026-08-10 10:00:00",
+      "updatedAt": "2026-08-20 04:00:00"
+    },
+    {
+      "id": "room-living",
+      "name": "Living Room",
+      "nameBn": "ড্রয়িং ও লিভিং রুম",
+      "floor": "1st Floor",
+      "icon": "Sofa",
+      "color": "#06b6d4",
+      "associatedEntities": [
+        "light.drawing_room",
+        "fan.living_room",
+        "climate.ac_drawing_room",
+        "media_player.living_room_tv",
+        "binary_sensor.drawing_room_motion",
+        "sensor.living_room_temperature"
+      ],
+      "microphoneInputId": "mic_usb_living_array",
+      "speakerOutputId": "media_player.living_room_tv",
+      "wakeWordOverride": "Hey Brain",
+      "isAdminRoom": false,
+      "accessScope": "RESTRICTED_LOCAL",
+      "allowedCrossRoomPermissions": [],
+      "automationsCount": 2,
+      "automations": [
+        {
+          "id": "ra-01",
+          "roomId": "room-living",
+          "name": "Movie Ambient Mode",
+          "nameBn": "সিনেমা অ্যাম্বিয়েন্ট মোড",
+          "voiceShortcut": "সিনেমা মোড অন করো",
+          "triggerCondition": "Voice Trigger in Living Room",
+          "actions": [
+            {
+              "entity_id": "light.drawing_room",
+              "service": "turn_on",
+              "params": {
+                "brightness_pct": 15
+              }
+            },
+            {
+              "entity_id": "media_player.living_room_tv",
+              "service": "volume_set",
+              "params": {
+                "volume_level": 0.45
+              }
+            }
+          ],
+          "enabled": true
+        },
+        {
+          "id": "ra-02",
+          "roomId": "room-living",
+          "name": "Guest Welcome Lighting",
+          "nameBn": "অতিথি স্বাগতম আলো",
+          "voiceShortcut": "মেহমান এসেছে লাইট জ্বালাও",
+          "triggerCondition": "Voice Trigger in Living Room",
+          "actions": [
+            {
+              "entity_id": "light.drawing_room",
+              "service": "turn_on",
+              "params": {
+                "brightness_pct": 100
+              }
+            },
+            {
+              "entity_id": "fan.living_room",
+              "service": "turn_on",
+              "params": {
+                "percentage": 80
+              }
+            }
+          ],
+          "enabled": true
+        }
+      ],
+      "createdAt": "2026-08-10 10:00:00",
+      "updatedAt": "2026-08-20 04:00:00"
+    },
+    {
+      "id": "room-kitchen",
+      "name": "Smart Kitchen",
+      "nameBn": "স্মার্ট রান্নাঘর",
+      "floor": "1st Floor",
+      "icon": "Utensils",
+      "color": "#f59e0b",
+      "associatedEntities": [
+        "light.kitchen_tube",
+        "media_player.kitchen_assistant"
+      ],
+      "microphoneInputId": "mic_esphome_kitchen_node",
+      "speakerOutputId": "media_player.kitchen_assistant",
+      "wakeWordOverride": "হুমায়ুন ভাই",
+      "isAdminRoom": false,
+      "accessScope": "RESTRICTED_LOCAL",
+      "allowedCrossRoomPermissions": [],
+      "automationsCount": 1,
+      "automations": [
+        {
+          "id": "ra-04",
+          "roomId": "room-kitchen",
+          "name": "Cooking Ventilation & Bright Lights",
+          "nameBn": "রান্নাঘরের লাইট ফুল করো",
+          "voiceShortcut": "রান্না শুরু করছি লাইট দাও",
+          "triggerCondition": "Voice Trigger in Kitchen",
+          "actions": [
+            {
+              "entity_id": "light.kitchen_tube",
+              "service": "turn_on",
+              "params": {}
+            }
+          ],
+          "enabled": true
+        }
+      ],
+      "createdAt": "2026-08-12 14:00:00",
+      "updatedAt": "2026-08-20 04:00:00"
+    },
+    {
+      "id": "room-front-gate",
+      "name": "Front Gate & Entrance",
+      "nameBn": "মেইন গেট ও প্রবেশদ্বার",
+      "floor": "Ground",
+      "icon": "DoorOpen",
+      "color": "#10b981",
+      "associatedEntities": [
+        "camera.front_gate",
+        "lock.front_door",
+        "media_player.door_speaker"
+      ],
+      "microphoneInputId": "mic_alsa_front_door",
+      "speakerOutputId": "media_player.door_speaker",
+      "wakeWordOverride": "Hey Brain",
+      "isAdminRoom": false,
+      "accessScope": "RESTRICTED_LOCAL",
+      "allowedCrossRoomPermissions": [],
+      "automationsCount": 1,
+      "automations": [
+        {
+          "id": "ra-05",
+          "roomId": "room-front-gate",
+          "name": "Open Gate Voice Unlock",
+          "nameBn": "ভয়েস দিয়ে গেট আনলক",
+          "voiceShortcut": "গেট আনলক করো",
+          "triggerCondition": "Voice Trigger at Front Gate by Owner",
+          "actions": [
+            {
+              "entity_id": "lock.front_door",
+              "service": "unlock",
+              "params": {}
+            }
+          ],
+          "enabled": true
+        }
+      ],
+      "createdAt": "2026-08-14 16:30:00",
+      "updatedAt": "2026-08-20 04:00:00"
+    }
+  ],
+  "HA_ENTITIES_REGISTRY": [
+    {
+      "entity_id": "light.drawing_room",
+      "name": "ড্রয়িং রুম মেইন লাইট (RGB/Dimmable)",
+      "domain": "light",
+      "capabilities": [
+        "brightness",
+        "rgb_color",
+        "transition"
+      ],
+      "state": "on",
+      "brightness": 75,
+      "last_updated": "2026-09-03 08:02:15"
+    },
+    {
+      "entity_id": "light.master_bed",
+      "name": "মাস্টার বেডরুম লাইট (Warm/Dimmable)",
+      "domain": "light",
+      "capabilities": [
+        "brightness",
+        "color_temp"
+      ],
+      "state": "off",
+      "brightness": 50
+    },
+    {
+      "entity_id": "light.kitchen",
+      "name": "রান্নাঘরের লাইট (Relay On/Off)",
+      "domain": "light",
+      "capabilities": [
+        "on_off"
+      ],
+      "state": "off"
+    },
+    {
+      "entity_id": "light.dining_room",
+      "name": "ডাইনিং রুম সিলিং লাইট (Daylight)",
+      "domain": "light",
+      "capabilities": [
+        "brightness",
+        "color_temp"
+      ],
+      "state": "off",
+      "brightness": 80
+    },
+    {
+      "entity_id": "light.balcony_garden",
+      "name": "বারান্দা ও ছাদ বাগান লাইট (Twilight)",
+      "domain": "light",
+      "capabilities": [
+        "brightness",
+        "on_off"
+      ],
+      "state": "off",
+      "brightness": 60
+    },
+    {
+      "entity_id": "fan.living_room",
+      "name": "লিভিং রুম ফ্যান (3-Speed Smart)",
+      "domain": "fan",
+      "capabilities": [
+        "percentage",
+        "oscillate"
+      ],
+      "state": "on",
+      "speed": 66
+    },
+    {
+      "entity_id": "fan.master_bed",
+      "name": "মাস্টার বেডরুম ফ্যান (BLDC Inverter)",
+      "domain": "fan",
+      "capabilities": [
+        "percentage"
+      ],
+      "state": "off",
+      "speed": 0
+    },
+    {
+      "entity_id": "fan.guest_bed",
+      "name": "গেস্ট বেডরুম ফ্যান (Step Variable)",
+      "domain": "fan",
+      "capabilities": [
+        "percentage"
+      ],
+      "state": "off",
+      "speed": 0
+    },
+    {
+      "entity_id": "fan.dining_room",
+      "name": "ডাইনিং রুম ফ্যান (High CFM)",
+      "domain": "fan",
+      "capabilities": [
+        "percentage"
+      ],
+      "state": "off",
+      "speed": 0
+    },
+    {
+      "entity_id": "switch.water_pump_motor",
+      "name": "ছাদের পানির পাম্প মোটর (1.5HP High Load)",
+      "domain": "switch",
+      "capabilities": [
+        "on_off",
+        "high_risk_confirmation",
+        "safety_lock"
+      ],
+      "state": "off",
+      "isHighRiskActuator": true,
+      "requiresConfirmation": true,
+      "wattage": 1200,
+      "currentAmperage": 0
+    },
+    {
+      "entity_id": "media_player.main_soundbox",
+      "name": "মাস্টার হাই-ফাই সাউন্ডবক্স (24-bit DAC / Multi-Room)",
+      "domain": "media_player",
+      "capabilities": [
+        "tts_speak",
+        "volume_set",
+        "equalizer_16band",
+        "bluetooth_sink"
+      ],
+      "state": "idle",
+      "volume_level": 0.75
+    },
+    {
+      "entity_id": "media_player.living_room_tv",
+      "name": "লিভিং রুম ৪K স্মার্ট টিভি (HDMI-CEC & OCR)",
+      "domain": "media_player",
+      "capabilities": [
+        "play_media",
+        "ocr_capture",
+        "volume_set",
+        "source_select"
+      ],
+      "state": "playing",
+      "volume_level": 0.4
+    },
+    {
+      "entity_id": "lock.front_door",
+      "name": "মেইন ডোর স্মার্ট লক (Matter Dual-Latch)",
+      "domain": "lock",
+      "capabilities": [
+        "lock",
+        "unlock",
+        "auto_relock",
+        "high_risk_confirmation"
+      ],
+      "state": "locked",
+      "isHighRiskActuator": true,
+      "requiresConfirmation": true
+    },
+    {
+      "entity_id": "climate.ac_master_bed",
+      "name": "মাস্টার বেডরুম এসি (Dual Inverter)",
+      "domain": "climate",
+      "capabilities": [
+        "temperature",
+        "fan_mode",
+        "hvac_modes"
+      ],
+      "state": "cool",
+      "current_temp": 25
+    },
+    {
+      "entity_id": "climate.ac_drawing_room",
+      "name": "ড্রয়িং রুম এসি (Dual Inverter)",
+      "domain": "climate",
+      "capabilities": [
+        "temperature",
+        "fan_mode"
+      ],
+      "state": "off",
+      "current_temp": 28
+    },
+    {
+      "entity_id": "camera.front_gate",
+      "name": "সামনের গেট PTZ ক্যামেরা (YOLOv8 Stream)",
+      "domain": "camera",
+      "capabilities": [
+        "ptz_pan",
+        "ptz_tilt",
+        "zoom",
+        "motion_detect",
+        "face_stream"
+      ],
+      "state": "streaming"
+    },
+    {
+      "entity_id": "camera.backyard",
+      "name": "ব্যাকইয়ার্ড ফিক্সড ক্যামেরা",
+      "domain": "camera",
+      "capabilities": [
+        "motion_detect"
+      ],
+      "state": "idle"
+    },
+    {
+      "entity_id": "binary_sensor.drawing_room_motion",
+      "name": "ড্রয়িং রুম মোশন সেন্সর (PIR)",
+      "domain": "binary_sensor",
+      "capabilities": [
+        "motion_trigger"
+      ],
+      "state": "off"
+    },
+    {
+      "entity_id": "binary_sensor.bedroom_motion",
+      "name": "মাস্টার বেডরুম মোশন সেন্সর",
+      "domain": "binary_sensor",
+      "capabilities": [
+        "motion_trigger"
+      ],
+      "state": "off"
+    },
+    {
+      "entity_id": "sensor.living_room_temperature",
+      "name": "লিভিং রুম টেম্পারেচার সেন্সর",
+      "domain": "sensor",
+      "capabilities": [
+        "numeric_temperature"
+      ],
+      "state": "27.4"
+    },
+    {
+      "entity_id": "sensor.bedroom_temperature",
+      "name": "মাস্টার বেডরুম টেম্পারেচার সেন্সর",
+      "domain": "sensor",
+      "capabilities": [
+        "numeric_temperature"
+      ],
+      "state": "25.1"
+    }
+  ],
+  "cameraProfiles": [
+    {
+      "cameraId": "camera.front_gate",
+      "name": "Front Gate PTZ Camera",
+      "nameBn": "মেইন গেট PTZ ক্যামেরা (YOLOv8 Stream)",
+      "location": "Front Gate & Entrance",
+      "streamUrl": "rtsp://192.168.1.101:554/live/ch0",
+      "supportsPtz": true,
+      "supportsTtsBroadcast": true,
+      "supportsAiVision": true,
+      "supportsSiren": true,
+      "supportsSpotlight": true,
+      "activeTriggers": [
+        "PERSON_DETECTED",
+        "VEHICLE_DETECTED",
+        "FACE_RECOGNIZED",
+        "UNKNOWN_FACE",
+        "LINE_CROSSING",
+        "SOUND_THRESHOLD_EXCEEDED"
+      ],
+      "activeActions": [
+        "TTS_VOICE_BROADCAST",
+        "PTZ_PRESET_PATROL",
+        "PTZ_PAN_CENTER",
+        "SIREN_BUZZER_ACTIVATE",
+        "SPOTLIGHT_IR_TOGGLE",
+        "SNAPSHOT_TELEGRAM_DASHBOARD"
+      ]
+    },
+    {
+      "cameraId": "camera.backyard",
+      "name": "Backyard Garden Camera",
+      "nameBn": "ব্যাকইয়ার্ড ফিক্সড ও স্পটলাইট ক্যামেরা",
+      "location": "Backyard Garden",
+      "streamUrl": "rtsp://192.168.1.102:554/live/ch0",
+      "supportsPtz": false,
+      "supportsTtsBroadcast": true,
+      "supportsAiVision": true,
+      "supportsSiren": true,
+      "supportsSpotlight": true,
+      "activeTriggers": [
+        "MOTION_DETECTED",
+        "PET_DETECTED",
+        "LINE_CROSSING",
+        "TAMPER_ALERT"
+      ],
+      "activeActions": [
+        "SPOTLIGHT_IR_TOGGLE",
+        "SIREN_BUZZER_ACTIVATE",
+        "RECORD_CLIP_START"
+      ]
+    },
+    {
+      "cameraId": "camera.drawing_room",
+      "name": "Living Room Indoor Camera",
+      "nameBn": "লিভিং রুম ইনডোর সেফটি ক্যামেরা",
+      "location": "Living Room",
+      "streamUrl": "rtsp://192.168.1.103:554/live/ch0",
+      "supportsPtz": true,
+      "supportsTtsBroadcast": true,
+      "supportsAiVision": true,
+      "supportsSiren": false,
+      "supportsSpotlight": false,
+      "activeTriggers": [
+        "PERSON_DETECTED",
+        "FACE_RECOGNIZED",
+        "SOUND_THRESHOLD_EXCEEDED"
+      ],
+      "activeActions": [
+        "TTS_VOICE_BROADCAST",
+        "PTZ_PAN_CENTER",
+        "DYNAMIC_AUDIO_INTERCEPT"
+      ]
+    }
+  ],
+  "cameraAutomations": [
+    {
+      "id": "cam-auto-01",
+      "name": "Night Perimeter Human Intercept & Interlock",
+      "nameBn": "রাত ১১টায় গেটে মানুষ আসলে ইয়ার্ড লাইট অন, PTZ প্যান ও এসি ফ্রিজ",
+      "cameraId": "camera.front_gate",
+      "cameraName": "Front Gate PTZ Camera",
+      "triggerEvent": "PERSON_DETECTED",
+      "triggerDetails": "AI Person detected after 23:00 on camera.front_gate",
+      "conditions": {
+        "timeAfter": "23:00:00",
+        "timeBefore": "06:00:00"
+      },
+      "crossDeviceActions": [
+        {
+          "entity_id": "light.drawing_room",
+          "service": "turn_on",
+          "params": {
+            "brightness_pct": 100
+          },
+          "delay_seconds": 0,
+          "descriptionBn": "ইয়ার্ড / ড্রয়িং রুম লাইট ১০০% অন"
+        },
+        {
+          "entity_id": "camera.front_gate",
+          "service": "ptz_preset",
+          "params": {
+            "preset_id": "preset_2_yard"
+          },
+          "delay_seconds": 0,
+          "descriptionBn": "ক্যামেরা PTZ প্রিসেট ২ (ইয়ার্ড পয়েন্ট)"
+        },
+        {
+          "entity_id": "media_player.door_speaker",
+          "service": "tts_speak",
+          "params": {
+            "message": "সাবধান! সংরক্ষিত এলাকায় অনুপ্রবেশ শনাক্ত হয়েছে।"
+          },
+          "delay_seconds": 1,
+          "descriptionBn": "ক্যামেরা স্পিকারে সতর্কবার্তা প্রচার"
+        },
+        {
+          "entity_id": "climate.ac_master_bed",
+          "service": "turn_off",
+          "params": {},
+          "delay_seconds": 0,
+          "descriptionBn": "মাস্টার রুম এসি ফ্রিজ / অফ"
+        }
+      ],
+      "enabled": true,
+      "lastFired": "2026-08-20 02:15:00",
+      "createdAt": "2026-08-20 01:00:00",
+      "executionCount": 7
+    },
+    {
+      "id": "cam-auto-02",
+      "name": "Vehicle Entry Spotlight & Auto-Patrol",
+      "nameBn": "গাড়ি প্রবেশে অটো ফ্লাডলাইট ও ড্রাইভওয়ে জুম",
+      "cameraId": "camera.front_gate",
+      "cameraName": "Front Gate PTZ Camera",
+      "triggerEvent": "VEHICLE_DETECTED",
+      "triggerDetails": "Vehicle detected approaching driveway",
+      "conditions": {},
+      "crossDeviceActions": [
+        {
+          "entity_id": "camera.front_gate",
+          "service": "ptz_preset",
+          "params": {
+            "preset_id": "preset_3_driveway"
+          },
+          "delay_seconds": 0,
+          "descriptionBn": "ক্যামেরা ড্রাইভওয়ে প্রিসেটে প্যান"
+        },
+        {
+          "entity_id": "media_player.living_room_tv",
+          "service": "tts_speak",
+          "params": {
+            "message": "ড্রাইভওয়েতে একটি গাড়ি প্রবেশ করেছে।"
+          },
+          "delay_seconds": 0,
+          "descriptionBn": "টিভি স্ক্রিন অডিও অ্যানাউন্সমেন্ট"
+        }
+      ],
+      "enabled": true,
+      "lastFired": "2026-08-19 18:30:00",
+      "createdAt": "2026-08-19 10:00:00",
+      "executionCount": 19
+    }
+  ],
+  "networkClientsList": [
+    {
+      "id": "dev-01",
+      "mac": "BC:D0:74:11:22:33",
+      "ip": "192.168.1.105",
+      "hostname": "Humayun-iPhone-15-Pro",
+      "deviceType": "SMARTPHONE",
+      "interfaceType": "WIFI_5GHZ",
+      "uploadSpeedKbps": 180.5,
+      "downloadSpeedKbps": 4200,
+      "totalUploadedMb": 620.4,
+      "totalDownloadedMb": 14500,
+      "rssiSignalDbm": -46,
+      "signalQuality": "EXCELLENT",
+      "isBlocked": false,
+      "isGuest": false,
+      "isKnown": true,
+      "speedLimitMbps": null,
+      "vendor": "Apple Inc.",
+      "lastSeen": "Just now",
+      "firstSeen": "2026-08-01 10:00:00",
+      "qosPriority": "HIGH",
+      "associatedRoomId": "room-master-bed",
+      "associatedRoomNameBn": "মাস্টার বেডরুম"
+    },
+    {
+      "id": "dev-02",
+      "mac": "44:65:0D:88:99:AA",
+      "ip": "192.168.1.112",
+      "hostname": "LivingRoom-Bravia-4K-OLED",
+      "deviceType": "SMART_TV",
+      "interfaceType": "ETHERNET_LAN",
+      "uploadSpeedKbps": 65,
+      "downloadSpeedKbps": 18500,
+      "totalUploadedMb": 310,
+      "totalDownloadedMb": 52400,
+      "rssiSignalDbm": -32,
+      "signalQuality": "EXCELLENT",
+      "isBlocked": false,
+      "isGuest": false,
+      "isKnown": true,
+      "speedLimitMbps": null,
+      "vendor": "Sony Corporation",
+      "lastSeen": "Just now",
+      "firstSeen": "2026-08-01 10:00:00",
+      "qosPriority": "NORMAL",
+      "associatedRoomId": "room-living",
+      "associatedRoomNameBn": "ড্রয়িং / লিভিং রুম"
+    },
+    {
+      "id": "dev-03",
+      "mac": "18:C0:4E:55:66:77",
+      "ip": "192.168.1.120",
+      "hostname": "FrontGate-PTZ-YOLO-Camera",
+      "deviceType": "CAMERA",
+      "interfaceType": "ETHERNET_LAN",
+      "uploadSpeedKbps": 2048,
+      "downloadSpeedKbps": 15,
+      "totalUploadedMb": 41200,
+      "totalDownloadedMb": 140,
+      "rssiSignalDbm": -35,
+      "signalQuality": "EXCELLENT",
+      "isBlocked": false,
+      "isGuest": false,
+      "isKnown": true,
+      "speedLimitMbps": null,
+      "vendor": "Hikvision / Dahua Generic",
+      "lastSeen": "Just now",
+      "firstSeen": "2026-08-01 10:00:00",
+      "qosPriority": "HIGH",
+      "associatedRoomId": "room-front-gate",
+      "associatedRoomNameBn": "মেইন গেট"
+    },
+    {
+      "id": "dev-04",
+      "mac": "D8:3A:DD:44:55:66",
+      "ip": "192.168.1.135",
+      "hostname": "MasterBed-Studio-Speaker",
+      "deviceType": "SPEAKER",
+      "interfaceType": "WIFI_5GHZ",
+      "uploadSpeedKbps": 18,
+      "downloadSpeedKbps": 540,
+      "totalUploadedMb": 110,
+      "totalDownloadedMb": 4200,
+      "rssiSignalDbm": -50,
+      "signalQuality": "GOOD",
+      "isBlocked": false,
+      "isGuest": false,
+      "isKnown": true,
+      "speedLimitMbps": null,
+      "vendor": "Amazon / Marshall",
+      "lastSeen": "Just now",
+      "firstSeen": "2026-08-05 14:20:00",
+      "qosPriority": "NORMAL",
+      "associatedRoomId": "room-master-bed",
+      "associatedRoomNameBn": "মাস্টার বেডরুম"
+    },
+    {
+      "id": "dev-05",
+      "mac": "F0:2F:74:88:77:66",
+      "ip": "192.168.1.155",
+      "hostname": "MacBook-Pro-M3-Max",
+      "deviceType": "LAPTOP",
+      "interfaceType": "WIFI_6GHZ",
+      "uploadSpeedKbps": 240,
+      "downloadSpeedKbps": 8600,
+      "totalUploadedMb": 1840,
+      "totalDownloadedMb": 31200,
+      "rssiSignalDbm": -44,
+      "signalQuality": "EXCELLENT",
+      "isBlocked": false,
+      "isGuest": false,
+      "isKnown": true,
+      "speedLimitMbps": null,
+      "vendor": "Apple Inc.",
+      "lastSeen": "Just now",
+      "firstSeen": "2026-08-02 09:15:00",
+      "qosPriority": "HIGH"
+    },
+    {
+      "id": "dev-06",
+      "mac": "A0:B1:C2:D3:E4:F5",
+      "ip": "192.168.1.189",
+      "hostname": "Guest-Unknown-Xiaomi",
+      "deviceType": "UNKNOWN",
+      "interfaceType": "WIFI_2_4GHZ",
+      "uploadSpeedKbps": 8.5,
+      "downloadSpeedKbps": 34,
+      "totalUploadedMb": 2.4,
+      "totalDownloadedMb": 18.2,
+      "rssiSignalDbm": -74,
+      "signalQuality": "FAIR",
+      "isBlocked": false,
+      "isGuest": true,
+      "isKnown": false,
+      "speedLimitMbps": 5,
+      "vendor": "Xiaomi / BBK Unverified",
+      "lastSeen": "2 min ago",
+      "firstSeen": "2026-08-20 11:00:00",
+      "qosPriority": "LOW"
+    }
+  ],
+  "networkSecurityEvents": [
+    {
+      "id": "sec-ev-01",
+      "timestamp": "2026-08-20 11:00:00",
+      "eventType": "UNKNOWN_MAC_JOINED",
+      "mac": "A0:B1:C2:D3:E4:F5",
+      "ip": "192.168.1.189",
+      "hostname": "Guest-Unknown-Xiaomi",
+      "detailsBn": "অজানা MAC ঠিকানা থেকে গেস্ট ওয়াইফাইতে সংযোগ শনাক্ত হয়েছে। ৫ Mbps স্পিড লিমিট প্রয়োগ করা হলো।",
+      "detailsEn": "Unknown MAC connected to Guest Wi-Fi. 5 Mbps QoS throttle applied automatically.",
+      "severity": "WARNING",
+      "automatedActionTaken": "Camera Sweep & Rate Limit Enforced"
+    }
+  ],
+  "routerProfileData": {
+    "protocol": "OPENWRT_RPC",
+    "name": "Edge-AI Core Gateway (OpenWrt / Multi-Protocol Adapter)",
+    "routerIp": "192.168.1.1",
+    "status": "ONLINE",
+    "uptime": "18d 14h 22m",
+    "cpuLoad": 14.2,
+    "memoryUsage": 38.6,
+    "activeClientsCount": 6,
+    "wanUploadMbps": 5.4,
+    "wanDownloadMbps": 52.8,
+    "guestNetworkEnabled": true,
+    "primarySsid": "Humayun_SmartHome_5G",
+    "guestSsid": "Humayun_Guest_IoT",
+    "wifiChannel24": 6,
+    "wifiChannel5": 149
+  },
+  "bluetoothReceiversList": [
+    {
+      "id": "bt-rec-01",
+      "mac": "FC:58:FA:11:22:33",
+      "name": "Marshall Stanmore III (Studio)",
+      "nameBn": "মার্শাল স্ট্যানমোর III (স্টুডিও স্পিকার)",
+      "location": "Living Room Studio",
+      "deviceType": "A2DP_SPEAKER",
+      "status": "STREAMING",
+      "batteryLevel": 100,
+      "codec": "LDAC",
+      "latencyMs": 18,
+      "volume": 80,
+      "assignedGroup": "group-party-all",
+      "isMaster": true,
+      "rssiDbm": -42
+    },
+    {
+      "id": "bt-rec-02",
+      "mac": "00:1B:66:44:55:66",
+      "name": "Sony WH-1000XM5 Hi-Fi",
+      "nameBn": "সোনি WH-1000XM5 হাই-ফাই হেডফোন",
+      "location": "Master Bedroom",
+      "deviceType": "HEADPHONES",
+      "status": "CONNECTED",
+      "batteryLevel": 85,
+      "codec": "LDAC",
+      "latencyMs": 15,
+      "volume": 65,
+      "assignedGroup": null,
+      "isMaster": false,
+      "rssiDbm": -48
+    },
+    {
+      "id": "bt-rec-03",
+      "mac": "40:ED:98:77:88:99",
+      "name": "JBL PartyBox Stage 320",
+      "nameBn": "জেবিএল পার্টিবক্স স্টেজ ৩২০",
+      "location": "Balcony & Yard",
+      "deviceType": "SOUNDBAR",
+      "status": "STREAMING",
+      "batteryLevel": 92,
+      "codec": "aptX_HD",
+      "latencyMs": 22,
+      "volume": 85,
+      "assignedGroup": "group-party-all",
+      "isMaster": false,
+      "rssiDbm": -55
+    },
+    {
+      "id": "bt-rec-04",
+      "mac": "7C:9E:BD:AA:BB:CC",
+      "name": "Bose SoundLink Revolve+",
+      "nameBn": "বোস সাউন্ডলিঙ্ক রিভলভ+ (ডাইনিং)",
+      "location": "Dining Area",
+      "deviceType": "A2DP_SPEAKER",
+      "status": "CONNECTED",
+      "batteryLevel": 70,
+      "codec": "AAC",
+      "latencyMs": 28,
+      "volume": 60,
+      "assignedGroup": null,
+      "isMaster": false,
+      "rssiDbm": -62
+    }
+  ],
+  "audioBroadcastGroups": [
+    {
+      "id": "group-party-all",
+      "name": "Whole-House Sync Party Matrix",
+      "nameBn": "পুরো বাড়ি মাল্টি-স্পিকার সিঙ্ক পার্টি ম্যাট্রিক্স",
+      "receiverIds": [
+        "bt-rec-01",
+        "bt-rec-03"
+      ],
+      "syncDelayMs": 0,
+      "activeStream": true,
+      "masterVolume": 82
+    }
+  ],
+  "musicReactiveConfigState": {
+    "enabled": true,
+    "selectedLightEntities": [
+      "light.drawing_room",
+      "light.master_bed"
+    ],
+    "colorPalette": "NEON_CYBERPUNK",
+    "bassSensitivity": 1.2,
+    "trebleSensitivity": 1,
+    "fadeTransitionSpeedMs": 80,
+    "strobeOnHeavyDrop": true,
+    "silenceFadeTimeoutSec": 3,
+    "activePresetName": "Cyberpunk Bass Pulsar"
+  },
+  "crossSystemAutomationsList": [
+    {
+      "id": "cross-auto-01",
+      "name": "Unknown Wi-Fi Intruder & Camera Interlock",
+      "nameBn": "অজানা ওয়াইফাই ডিভাইস যুক্ত হলে ক্যামেরা প্যান ও স্পিকার অ্যালার্ট",
+      "enabled": true,
+      "triggerSource": "NETWORK_SENTINEL",
+      "triggerConditionSummary": "When an unknown MAC connects to router",
+      "triggerConditionSummaryBn": "রাউটারে কোনো অজানা MAC ঠিকানা যুক্ত হলে",
+      "conditions": {
+        "eventType": "UNKNOWN_MAC_JOINED"
+      },
+      "actions": [
+        {
+          "targetDomain": "CAMERA_VISION",
+          "entity_id": "camera.front_gate",
+          "service": "ptz_preset",
+          "params": {
+            "preset_id": "preset_2_yard"
+          },
+          "descriptionBn": "ক্যামেরা PTZ প্রিসেট ২-তে প্যান"
+        },
+        {
+          "targetDomain": "VOICE_TTS",
+          "entity_id": "media_player.door_speaker",
+          "service": "tts_speak",
+          "params": {
+            "message": "সতর্কতা: নতুন অজানা ওয়াইফাই ডিভাইস নেটওয়ার্কে যুক্ত হয়েছে।"
+          },
+          "descriptionBn": "ক্যামেরা স্পিকারে সতর্কবার্তা প্রচার"
+        },
+        {
+          "targetDomain": "HA_ENTITY",
+          "entity_id": "light.drawing_room",
+          "service": "turn_on",
+          "params": {
+            "brightness_pct": 100,
+            "rgb_color": [
+              255,
+              0,
+              0
+            ]
+          },
+          "descriptionBn": "ড্রয়িং রুম লাইট লাল রঙে ১০০% অন"
+        }
+      ],
+      "lastFired": "2026-08-20 11:00:00",
+      "executionCount": 3,
+      "createdAt": "2026-08-20 10:00:00"
+    },
+    {
+      "id": "cross-auto-02",
+      "name": "Heavy Bass Drop & Whole-House Cyberpunk Light Sync",
+      "nameBn": "মিউজিক হেভি ব্যাস ড্রপে পুরো বাড়ির লাইট সাইবারপাঙ্ক পালসিং",
+      "enabled": true,
+      "triggerSource": "FFT_BEAT_DROP",
+      "triggerConditionSummary": "When audio FFT bass energy > 80%",
+      "triggerConditionSummaryBn": "মিউজিক এফএফটি ব্যাস এনার্জি > ৮০% হলে",
+      "conditions": {
+        "bassThreshold": 80
+      },
+      "actions": [
+        {
+          "targetDomain": "HA_ENTITY",
+          "entity_id": "light.drawing_room",
+          "service": "turn_on",
+          "params": {
+            "rgb_color": [
+              255,
+              0,
+              128
+            ],
+            "brightness_pct": 100
+          },
+          "descriptionBn": "ড্রয়িং রুম লাইট নিয়ন ম্যাজেন্টা ফ্ল্যাশ"
+        },
+        {
+          "targetDomain": "HA_ENTITY",
+          "entity_id": "light.master_bed",
+          "service": "turn_on",
+          "params": {
+            "rgb_color": [
+              0,
+              255,
+              234
+            ],
+            "brightness_pct": 95
+          },
+          "descriptionBn": "মাস্টার বেড লাইট নিয়ন সায়ান পালস"
+        }
+      ],
+      "lastFired": "2026-08-20 11:10:00",
+      "executionCount": 142,
+      "createdAt": "2026-08-20 09:30:00"
+    }
+  ],
+  "inMemoryKeyPool": [
+    {
+      "key_id": "key-env-active",
+      "masked_key": "AQ.A...gPUw",
+      "raw_key": "AQ.Ab8RN6JNC4i_lM3y8zWfqLYYz8d6b3iOrVKzq9PbhVH6rngPUw",
+      "label": "Primary Gemini Cloud Key",
+      "active": true,
+      "status": "HEALTHY",
+      "last_used": "Verified Live",
+      "request_count": 1,
+      "error_count": 0,
+      "avg_latency_ms": 1065
+    }
+  ],
+  "storageDrives": [
+    {
+      "id": "drive-nvme-1",
+      "name": "Kingston KC3000 PCIe 4.0 NVMe M.2 SSD 1TB",
+      "mountPath": "/mnt/ext_nvme",
+      "deviceNode": "/dev/nvme0n1p1",
+      "type": "NVME_SSD",
+      "totalBytes": 1000204886016,
+      "usedBytes": 214748364800,
+      "freeBytes": 785456521216,
+      "health": "OPTIMAL",
+      "temperatureC": 39,
+      "readSpeedMBs": 4850,
+      "writeSpeedMBs": 4200,
+      "isDefaultData": false,
+      "isRemovable": false,
+      "status": "MOUNTED"
+    },
+    {
+      "id": "drive-sata-1",
+      "name": "Samsung 870 EVO SATA-III SSD 500GB",
+      "mountPath": "/mnt/sata_ssd",
+      "deviceNode": "/dev/sda1",
+      "type": "SATA_SSD",
+      "totalBytes": 500107862016,
+      "usedBytes": 128849018880,
+      "freeBytes": 371258843136,
+      "health": "OPTIMAL",
+      "temperatureC": 34,
+      "readSpeedMBs": 560,
+      "writeSpeedMBs": 530,
+      "isDefaultData": false,
+      "isRemovable": false,
+      "status": "MOUNTED"
+    },
+    {
+      "id": "drive-internal-data",
+      "name": "Home Assistant OS Host Internal Storage (/data)",
+      "mountPath": "/data",
+      "deviceNode": "/dev/mmcblk0p8",
+      "type": "INTERNAL_EMMC",
+      "totalBytes": 64000000000,
+      "usedBytes": 14200000000,
+      "freeBytes": 49800000000,
+      "health": "GOOD",
+      "temperatureC": 41,
+      "readSpeedMBs": 180,
+      "writeSpeedMBs": 120,
+      "isDefaultData": true,
+      "isRemovable": false,
+      "status": "MOUNTED"
+    },
+    {
+      "id": "drive-usb-backup",
+      "name": "Western Digital Elements 2TB USB 3.0 External HDD",
+      "mountPath": "/media/usb_backup_2tb",
+      "deviceNode": "/dev/sdb1",
+      "type": "EXTERNAL_USB_HDD",
+      "totalBytes": 2000398934016,
+      "usedBytes": 429496729600,
+      "freeBytes": 1570902204416,
+      "health": "GOOD",
+      "temperatureC": 32,
+      "readSpeedMBs": 140,
+      "writeSpeedMBs": 125,
+      "isDefaultData": false,
+      "isRemovable": true,
+      "status": "MOUNTED"
+    }
+  ],
+  "storageAssetMapping": {
+    "modelsDriveId": "drive-nvme-1",
+    "trainingDataDriveId": "drive-nvme-1",
+    "memoryVectorsDriveId": "drive-sata-1",
+    "audioCacheDriveId": "drive-internal-data",
+    "autoFailoverEnabled": true,
+    "fallbackDriveId": "drive-internal-data"
+  },
+  "compressedDatasetLogs": [
+    {
+      "id": "ds-log-01",
+      "fileName": "knowledge_distill_v3.jsonl.zst",
+      "format": "ZSTD_ZST",
+      "targetDirectory": "/mnt/ext_nvme/training_data/",
+      "targetDriveName": "Kingston KC3000 NVMe M.2 SSD",
+      "targetDriveMount": "/mnt/ext_nvme",
+      "originalSizeBytes": 14889728,
+      "compressedSizeBytes": 1845248,
+      "compressionRatioPct": 87.6,
+      "compressionTimeMs": 142,
+      "decompressionTimeMs": 18,
+      "recordCount": 12500,
+      "summary": "Compressed 12,500 household Bengali/English dialogue pairs into 1.76MB Zstandard archive.",
+      "summaryBn": "১২,৫০০টি পারিবারিক বাংলা ও ইংরেজি ডায়লগ পেয়ার কমপ্রেস করে ১.৭৬ মেগাবাইটে Zstandard আর্কাইভে সেভ করা হয়েছে।",
+      "audioSpokenMessageBn": "জেমিনি ট্রেনিং ডেটাসেট কমপ্রেস করে এক্সটার্নাল এনভিএমই ড্রাইভের 'training_data' ফোল্ডারে সেভ করা হয়েছে।",
+      "createdAt": "2026-08-24 10:15:00",
+      "sha256Checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "category": "FINE_TUNING_DATASET"
+    },
+    {
+      "id": "ds-log-02",
+      "fileName": "elderly_habits_ast_matrix.msgpack.gz",
+      "format": "MSGPACK_BIN",
+      "targetDirectory": "/mnt/ext_nvme/training_data/",
+      "targetDriveName": "Kingston KC3000 NVMe M.2 SSD",
+      "targetDriveMount": "/mnt/ext_nvme",
+      "originalSizeBytes": 8945664,
+      "compressedSizeBytes": 983040,
+      "compressionRatioPct": 89,
+      "compressionTimeMs": 98,
+      "decompressionTimeMs": 12,
+      "recordCount": 840,
+      "summary": "Compressed 840 behavioral AST routines & circadian sleep-cycle models.",
+      "summaryBn": "৮৪০টি আচরণগত এএসটি রুটিন এবং স্লিপ-সাইকেল কমপ্যাক্ট বাইনারিতে সংরক্ষণ করা হয়েছে।",
+      "audioSpokenMessageBn": "বয়োজ্যেষ্ঠ ও পারিবারিক রুটিনের বাইনারি এএসটি ম্যাট্রিক্স সফলভাবে মেমোরিতে সিঙ্ক হয়েছে।",
+      "createdAt": "2026-08-23 21:40:00",
+      "sha256Checksum": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
+      "category": "AST_ROUTINES"
+    },
+    {
+      "id": "ds-log-03",
+      "fileName": "weights_transformer_head4.npz.gz",
+      "format": "GZIP_JSONL",
+      "targetDirectory": "/mnt/sata_ssd/models/",
+      "targetDriveName": "Samsung 870 EVO SATA SSD",
+      "targetDriveMount": "/mnt/sata_ssd",
+      "originalSizeBytes": 26214400,
+      "compressedSizeBytes": 3981312,
+      "compressionRatioPct": 84.8,
+      "compressionTimeMs": 245,
+      "decompressionTimeMs": 24,
+      "recordCount": 4,
+      "summary": "4-Head Self-Attention NumPy weight matrices for local Edge inference.",
+      "summaryBn": "৪-হেড সেলফ-অ্যাটেনশন নাম্পাই ওয়েটস লোকাল এজ ইনফারেন্সের জন্য কমপ্রেস করা হয়েছে।",
+      "audioSpokenMessageBn": "লোকাল নাম্পাই সেলফ-অ্যাটেনশন মডেলের ওয়েট ফাইল কমপ্রেস করে সাটা এসএসডিতে সংরক্ষণ করা হয়েছে।",
+      "createdAt": "2026-08-22 18:00:00",
+      "sha256Checksum": "a6c57f92020e980327f31c261e41be86241b12b509ef48b6131498b3c66f5686",
+      "category": "MODEL_WEIGHTS"
+    }
+  ],
+  "haLiveConfig": {
+    "haUrl": "http://homeassistant.local:8123",
+    "accessToken": "",
+    "connected": false,
+    "version": "2026.8.2",
+    "locationName": "Home Assistant OS (Humayun Residence)",
+    "mode": "EDGE_SANDBOX",
+    "lastSynced": "2026-09-03 08:01:33",
+    "entitiesCount": 18
+  },
+  "automationExecutionEvents": [
+    {
+      "id": "evt-01",
+      "timestamp": "2026-08-20 05:30:12",
+      "originRoomId": "room-master-bed",
+      "originRoomName": "Master Bedroom",
+      "originRoomNameBn": "মাস্টার বেডরুম",
+      "actionType": "CREATED",
+      "automationTitle": "Evening Living Room Ambient Fade",
+      "entitiesAffected": [
+        "light.drawing_room",
+        "climate.ac_master_bed"
+      ],
+      "detailsBn": "নতুন রুল তৈরি করা হয়েছে: সন্ধ্যা ৬টায় ড্রয়িং রুমের লাইট ৪০% এবং এসি ২৬° চালু।",
+      "detailsEn": "Automation created for living room lights & master AC sync.",
+      "severity": "SUCCESS"
+    },
+    {
+      "id": "evt-02",
+      "timestamp": "2026-08-20 05:42:00",
+      "originRoomId": "room-front-gate",
+      "originRoomName": "Front Gate",
+      "originRoomNameBn": "মেইন গেট",
+      "actionType": "TRIGGERED",
+      "automationTitle": "Front Gate Security Motion Alert & PTZ Auto-Track",
+      "entitiesAffected": [
+        "camera.front_gate",
+        "media_player.door_speaker"
+      ],
+      "detailsBn": "গেটে মানুষ উপস্থিতি শনাক্ত হওয়ায় স্বয়ংক্রিয়ভাবে ক্যামেরা ট্র্যাক ও অডিও ডায়ালগ শুরু হয়েছে।",
+      "detailsEn": "Person detected at front gate. PTZ camera auto-centered and welcome audio triggered.",
+      "severity": "INFO"
+    },
+    {
+      "id": "evt-03",
+      "timestamp": "2026-08-20 06:15:33",
+      "originRoomId": "room-living",
+      "originRoomName": "Living Room",
+      "originRoomNameBn": "লিভিং রুম",
+      "actionType": "TRIGGERED",
+      "automationTitle": "Night Energy Saver Kill-Switch",
+      "entitiesAffected": [
+        "light.drawing_room",
+        "fan.living_room"
+      ],
+      "detailsBn": "অটোমেশন এক্সিকিউট হয়েছে: ড্রয়িং রুমে ১৫ মিনিট নড়াচড়া না থাকায় লাইট ও ফ্যান বন্ধ।",
+      "detailsEn": "Energy saver triggered: No motion detected for 15 mins. Lights & fan powered down.",
+      "severity": "INFO"
+    }
+  ]
+}
