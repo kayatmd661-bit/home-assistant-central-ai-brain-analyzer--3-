@@ -1,6 +1,6 @@
 name: "Auto-Evolving Edge-AI Master Hub"
 description: "Zero-Loss Auto-Updating Edge-AI Hub with Native SUPERVISOR_TOKEN Auto-Discovery, Full Admin Access, Persistent /data/ JSON-Store, Multi-Room Spatial Voice Brain & 21 Dashboards."
-version: "3.14.0"
+version: "3.15.0"
 slug: "edge_ai_master_hub"
 url: "https://github.com/kayatmd5/edge-ai-master-hub"
 arch:
