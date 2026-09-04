@@ -55,17 +55,12 @@ try:
     from core_telemetry import TelemetryEngine, AudioRouter, HATelemetryState
     from core_cloud_teacher import CloudTeacherEngine
     from core_dynamic import DynamicCodeSynthesizer, PersistentStateRegistry, TextlessTransformerBrain
-    from core_audio import PureNumPyAudioFeatureExtractor, NativeWakeWordDetector, handle_gemini_live_websocket
+    from core_audio import PureNumPyAudioFeatureExtractor, NativeWakeWordDetector
     CORE_ENGINES_AVAILABLE = True
     logger.info("Modular Edge-AI core sub-engines successfully mounted into FastAPI runtime.")
 except Exception as e:
     CORE_ENGINES_AVAILABLE = False
     logger.warning(f"Edge-AI core sub-engines loading in standalone/fallback mode: {e}")
-
-try:
-    from gemini_live import handle_gemini_live_websocket
-except Exception:
-    pass
 
 # 1. HA Live & Entities State
 ha_config_state = {
@@ -868,24 +863,6 @@ def get_gemini_usage_stats_endpoint():
             "totalPoolKeys": max(1, len(gemini_keys_store))
         }
     }
-
-# WebSocket Proxy Endpoint for Gemini Live
-@app.websocket("/api/gemini/live-ws")
-@app.websocket("/{prefix:path}/api/gemini/live-ws")
-async def gemini_live_websocket_endpoint(websocket: WebSocket, prefix: Optional[str] = None):
-    active_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not active_key or active_key == "MY_GEMINI_API_KEY":
-        for k in gemini_keys_store:
-            if k.get("active", True) and (k.get("raw_key") or k.get("api_key")):
-                active_key = (k.get("raw_key") or k.get("api_key") or "").strip()
-                break
-
-    if "handle_gemini_live_websocket" in globals() and handle_gemini_live_websocket:
-        await handle_gemini_live_websocket(websocket, api_key=active_key)
-    else:
-        await websocket.accept()
-        await websocket.send_text(json.dumps({"error": "Gemini Live Proxy handler is unavailable."}))
-        await websocket.close()
 
 @app.post("/api/gemini/live-chat")
 @app.post("/api/gemini/chat")
