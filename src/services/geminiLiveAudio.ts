@@ -154,7 +154,14 @@ export class GeminiLiveAudioClient {
 
           const pcmBase64 = this.floatTo16BitPCMBase64(inputData);
           if (pcmBase64) {
-            this.ws.send(JSON.stringify({ type: 'audio', audio: pcmBase64 }));
+            const payload = {
+              type: 'audio',
+              audio: pcmBase64,
+              realtime_input: {
+                media_chunks: [{ mime_type: "audio/pcm;rate=16000", data: pcmBase64 }]
+              }
+            };
+            this.ws.send(JSON.stringify(payload));
           }
         };
 
@@ -190,8 +197,8 @@ export class GeminiLiveAudioClient {
           try {
             const data = JSON.parse(event.data);
 
-            if (data.type === 'live_ready') {
-              console.log('[GeminiLiveAudio] Live Ready:', data);
+            if (data.setupComplete || data.type === 'live_ready') {
+              console.log('[GeminiLiveAudio] Live Session Ready');
               this.isLive = true;
               this.callbacks.onConnected?.();
               return;
@@ -201,6 +208,26 @@ export class GeminiLiveAudioClient {
               console.warn('[GeminiLiveAudio] Server requested fallback mode:', data.reason);
               this.callbacks.onFallback?.(data.reason || 'UNAVAILABLE', data.message || 'লোকাল টেক্সটলেস ইঞ্জিন সক্রিয়');
               return;
+            }
+
+            // Standard Gemini Live Bidi serverContent frame parsing
+            if (data.serverContent) {
+              const modelTurn = data.serverContent.modelTurn;
+              if (modelTurn && Array.isArray(modelTurn.parts)) {
+                for (const part of modelTurn.parts) {
+                  if (part.text) {
+                    this.callbacks.onTranscript?.('model', part.text);
+                  }
+                  if (part.inlineData && part.inlineData.data) {
+                    this.playAudioChunk(part.inlineData.data);
+                    this.callbacks.onAudioChunk?.(part.inlineData.data);
+                  }
+                }
+              }
+              if (data.serverContent.interrupted) {
+                this.stopCurrentAudioPlayback();
+                this.callbacks.onInterrupted?.();
+              }
             }
 
             if (data.type === 'audio' && data.audio) {
@@ -221,12 +248,13 @@ export class GeminiLiveAudioClient {
               this.callbacks.onInterrupted?.();
             }
 
-            if (data.type === 'error') {
-              console.error('[GeminiLiveAudio] Server message error:', data.error);
+            if (data.error || data.type === 'error') {
+              const errTxt = typeof data.error === 'string' ? data.error : data.error?.message || 'Gemini Proxy Error';
+              console.error('[GeminiLiveAudio] Server message error:', errTxt);
               if (data.fallback_available) {
-                this.callbacks.onFallback?.('ERROR', data.error);
+                this.callbacks.onFallback?.('ERROR', errTxt);
               } else {
-                this.callbacks.onError?.(data.error);
+                this.callbacks.onError?.(errTxt);
               }
             }
           } catch (e: any) {
@@ -308,7 +336,15 @@ export class GeminiLiveAudioClient {
 
   public sendTextMessage(text: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'text', text }));
+      const payload = {
+        type: 'text',
+        text: text,
+        client_content: {
+          turns: [{ role: 'user', parts: [{ text: text }] }],
+          turn_complete: true
+        }
+      };
+      this.ws.send(JSON.stringify(payload));
     }
   }
 
