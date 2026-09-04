@@ -29,8 +29,10 @@ export async function ensureAudioContextResumed(ctx?: AudioContext | null): Prom
  */
 export function getLiveWebSocketUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.host;
-  
+  const hostname = window.location.hostname;
+  const currentPort = window.location.port;
+  const portSuffix = (currentPort && currentPort !== '80' && currentPort !== '443') ? `:${currentPort}` : ':8099';
+
   let ingressPrefix = '';
   if (typeof window !== 'undefined' && window.location.pathname) {
     const ingressMatch = window.location.pathname.match(/(\/api\/hassio_ingress\/[^/]+)/);
@@ -39,5 +41,5 @@ export function getLiveWebSocketUrl(): string {
     }
   }
 
-  return `${protocol}//${host}${ingressPrefix}/api/gemini/live-ws`;
+  return `${protocol}//${hostname}${portSuffix}${ingressPrefix}/api/gemini/live-ws`;
 }

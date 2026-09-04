@@ -17,6 +17,8 @@ ingress_port: 8099
 ingress_entry: "/"
 ports:
   8099/tcp: 8099
+ports_description:
+  8099/tcp: "Gemini Live Direct WebSocket Port"
 panel_icon: "mdi:brain"
 panel_title: "Edge-AI Master Hub"
 homeassistant_api: true

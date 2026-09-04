@@ -43,7 +43,9 @@ export class GeminiLiveAudioClient {
     try {
       // 1. Resolve WebSocket URL with full Home Assistant Ingress prefix support
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host;
+      const hostname = window.location.hostname;
+      const currentPort = window.location.port;
+      const portSuffix = (currentPort && currentPort !== '80' && currentPort !== '443') ? `:${currentPort}` : ':8099';
       
       let ingressPrefix = '';
       if (typeof window !== 'undefined' && window.location.pathname) {
@@ -53,7 +55,7 @@ export class GeminiLiveAudioClient {
         }
       }
 
-      const wsUrl = `${protocol}//${host}${ingressPrefix}/api/gemini/live-ws`;
+      const wsUrl = `${protocol}//${hostname}${portSuffix}${ingressPrefix}/api/gemini/live-ws`;
       console.log('[GeminiLiveAudio] Initializing Live Session via:', wsUrl);
 
       // 2. Initialize AudioContext on user click gesture (resumes audio context immediately)
@@ -76,6 +78,11 @@ export class GeminiLiveAudioClient {
       // 3. Safe Microphone Permission Request (Cross-Platform & WebView/iFrame Ingress safe)
       let micAcquired = false;
       let micWarningMsg: string | null = null;
+
+      if (typeof window !== 'undefined' && window.isSecureContext === false) {
+        console.warn('[GeminiLiveAudio] Security Warning: window.isSecureContext is false. HTTPS/SSL is required for microphone access in mobile browsers.');
+        micWarningMsg = 'HTTPS/SSL সক্রিয় নেই। মোবাইল ব্রাউজারে মাইক্রোফোন অ্যাক্সেসের জন্য এইচটিটিপিএস প্রয়োজন।';
+      }
 
       try {
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -113,13 +120,18 @@ export class GeminiLiveAudioClient {
           }
         }
       } catch (micErr: any) {
-        console.warn('[GeminiLiveAudio] Microphone permission notice:', micErr);
         const errName = micErr?.name || '';
         if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
-          micWarningMsg = 'মাইক্রোফোন ব্যবহারের অনুমতি বাতিল করা হয়েছে। অ্যাপ বা ব্রাউজারের পারমিশন দিন।';
+          console.error('[GeminiLiveAudio] Microphone Permission Rejected (NotAllowedError):', micErr);
+          micWarningMsg = 'মাইক্রোফোন ব্যবহারের অনুমতি বাতিল করা হয়েছে (NotAllowedError)। ব্রাউজার থেকে পারমিশন অনুমতি দিন।';
+        } else if (errName === 'InsecureContextError' || (typeof window !== 'undefined' && !window.isSecureContext)) {
+          console.error('[GeminiLiveAudio] InsecureContextError: HTTPS/SSL is required for microphone access.', micErr);
+          micWarningMsg = 'এইচটিটিপিএস সুরক্ষিত সংযোগ ছাড়াই মাইক্রোফোন ব্লক করা হয়েছে (InsecureContextError)।';
         } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
+          console.warn('[GeminiLiveAudio] No microphone device found:', micErr);
           micWarningMsg = 'ডিভাইসে কার্যকর কোনো মাইক্রোফোন পাওয়া যায়নি।';
         } else {
+          console.warn('[GeminiLiveAudio] Microphone access notice:', micErr);
           micWarningMsg = 'মাইক্রোফোন অ্যাক্সেস সীমাবদ্ধ (ইনগ্রেস আইফ্রেম)। টেক্সট দিয়ে কথা বলতে পারেন।';
         }
       }

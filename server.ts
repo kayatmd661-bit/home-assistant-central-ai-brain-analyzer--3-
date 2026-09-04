@@ -866,7 +866,7 @@ function getGeminiClient(): GoogleGenAI | null {
 // REAL-TIME GEMINI TELEMETRY, TOKEN GUARD & FAILOVER SEQUENCER
 // -------------------------------------------------------------
 export const FREE_TIER_PRIORITY_MODELS = [
-  'gemini-3.8-flash',
+  'gemini-2.0-flash',
   'gemini-3.1-flash-lite',
   'gemini-flash-latest'
 ];
@@ -897,7 +897,7 @@ export const geminiTelemetry: GeminiTelemetryStats = {
   lastVerified: 'Just Now',
   lastLatencyMs: 78,
   lastStatus: 'CONNECTED',
-  activeModel: 'gemini-3.8-flash',
+  activeModel: 'gemini-2.0-flash',
   activeKeyMasked: 'AIza...Active',
   activeKeyLabel: 'Primary Gemini Cloud Key',
   estimatedCost: '$0.00 (Free Tier / In-Quota)'
@@ -4497,7 +4497,7 @@ app.post(['/api/gemini/keys', '/api/keys'], async (req: Request, res: Response) 
     });
     const startTime = Date.now();
     await testAi.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.0-flash',
       contents: 'Respond with OK'
     });
     measuredLatency = Date.now() - startTime;
@@ -4624,7 +4624,7 @@ app.all(['/api/gemini/test-key', '/api/gemini/test', '/api/keys/test', '/api/gem
       httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
     });
 
-    const candidateModels = ['gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-3.8-flash'];
+    const candidateModels = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash'];
     let verifiedModel = 'gemini-1.5-flash';
     let responseText = 'VERIFIED';
     let verified = false;

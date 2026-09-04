@@ -653,7 +653,7 @@ async def add_gemini_key(req: Request):
         "error_count": 0,
         "avg_latency_ms": 115.0,
         "latency_ms": 115,
-        "model": body.get("model", "gemini-3.8-flash"),
+        "model": body.get("model", "gemini-2.0-flash"),
         "priority": len(gemini_keys_store) + 1,
         "last_used": "Verified Live"
     }
@@ -715,7 +715,7 @@ async def test_gemini_key_endpoint(req: Request):
     latency_ms = 115
     try:
         import urllib.request
-        ping_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash?key={key_to_test}"
+        ping_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash?key={key_to_test}"
         req_ping = urllib.request.Request(ping_url, headers={"User-Agent": "Edge-AI-HAOS/1.0"})
         with urllib.request.urlopen(req_ping, timeout=4) as resp:
             if resp.status == 200:
@@ -724,7 +724,7 @@ async def test_gemini_key_endpoint(req: Request):
                     "success": True,
                     "status": "VALID",
                     "latency_ms": latency_ms,
-                    "model": "gemini-3.8-flash",
+                    "model": "gemini-2.0-flash",
                     "message": "Key verification successful. Gemini Live Cloud accessible.",
                     "messageBn": "এপিআই কি সফলভাবে ভেরিফাই হয়েছে। ক্লাউড কানেকশন সক্রিয়।"
                 }
@@ -754,7 +754,7 @@ async def test_gemini_key_endpoint(req: Request):
         "success": is_valid_format,
         "status": "VALID" if is_valid_format else "AUTH_FAILED",
         "latency_ms": latency_ms,
-        "model": "gemini-3.8-flash",
+        "model": "gemini-2.0-flash",
         "message": "Gemini key verified successfully." if is_valid_format else "Invalid API key format.",
         "messageBn": "এপিআই কি সফলভাবে ভেরিফাই হয়েছে।" if is_valid_format else "এপিআই কি ফরম্যাট সঠিক নয়।"
     }
@@ -783,7 +783,7 @@ async def verify_gemini_connection_endpoint():
         start_ping = time.time()
         try:
             import urllib.request
-            ping_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash?key={active_key}"
+            ping_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash?key={active_key}"
             req_ping = urllib.request.Request(ping_url, headers={"User-Agent": "Edge-AI-HAOS/1.0"})
             with urllib.request.urlopen(req_ping, timeout=3) as resp:
                 if resp.status == 200:
@@ -803,7 +803,7 @@ async def verify_gemini_connection_endpoint():
         "success": is_connected,
         "status": status,
         "latencyMs": latency_ms,
-        "activeModel": "gemini-3.8-flash",
+        "activeModel": "gemini-2.0-flash",
         "keyLabel": active_label,
         "keyMasked": masked_key,
         "isLiveAvailable": is_connected,
@@ -821,7 +821,7 @@ async def verify_gemini_connection_endpoint():
             "lastVerified": time.strftime("%I:%M:%S %p"),
             "lastLatencyMs": latency_ms,
             "lastStatus": status,
-            "activeModel": "gemini-3.8-flash",
+            "activeModel": "gemini-2.0-flash",
             "activeKeyMasked": masked_key,
             "activeKeyLabel": active_label,
             "estimatedCost": "$0.00 (Free Tier / In-Quota)"
@@ -845,7 +845,7 @@ def get_gemini_usage_stats_endpoint():
             "lastVerified": time.strftime("%I:%M:%S %p"),
             "lastLatencyMs": 78,
             "lastStatus": "CONNECTED" if active_key else "STANDBY",
-            "activeModel": "gemini-3.8-flash",
+            "activeModel": "gemini-2.0-flash",
             "activeKeyMasked": masked,
             "activeKeyLabel": "Primary Gemini Cloud Key",
             "estimatedCost": "$0.00 (Free Tier / In-Quota)"
@@ -858,7 +858,7 @@ def get_gemini_usage_stats_endpoint():
             "totalRequests": 0,
             "failoverCount": 0,
             "estimatedCost": "$0.00 (Free Tier / Flash Tier)",
-            "activeModel": "gemini-3.8-flash",
+            "activeModel": "gemini-2.0-flash",
             "activeKeyLabel": "Primary Gemini Cloud Key",
             "activeKeyMasked": masked,
             "lastStatus": "CONNECTED" if active_key else "STANDBY",
@@ -957,7 +957,7 @@ async def gemini_live_chat_endpoint(req: Request):
     if active_key and len(active_key) > 20:
         try:
             import urllib.request
-            chat_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={active_key}"
+            chat_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={active_key}"
             payload = {
                 "contents": [
                     {
