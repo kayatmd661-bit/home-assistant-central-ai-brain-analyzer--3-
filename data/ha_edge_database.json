@@ -1,6 +1,6 @@
 {
   "version": "2026.8.5-production",
-  "savedAt": "2026-09-03T08:02:15.180Z",
+  "savedAt": "2026-09-06T09:38:04.860Z",
   "savedRules": [
     {
       "id": "rule-01",
@@ -409,7 +409,7 @@
       ],
       "state": "on",
       "brightness": 75,
-      "last_updated": "2026-09-03 08:02:15"
+      "last_updated": "2026-09-06 09:35:59"
     },
     {
       "entity_id": "light.master_bed",
@@ -429,7 +429,8 @@
       "capabilities": [
         "on_off"
       ],
-      "state": "off"
+      "state": "on",
+      "last_updated": "2026-09-06 08:21:25"
     },
     {
       "entity_id": "light.dining_room",
@@ -462,7 +463,8 @@
         "oscillate"
       ],
       "state": "on",
-      "speed": 66
+      "speed": 66,
+      "last_updated": "2026-09-06 08:35:45"
     },
     {
       "entity_id": "fan.master_bed",
@@ -559,7 +561,8 @@
         "hvac_modes"
       ],
       "state": "cool",
-      "current_temp": 25
+      "current_temp": 24,
+      "last_updated": "2026-09-06 09:38:04"
     },
     {
       "entity_id": "climate.ac_drawing_room",
@@ -1160,16 +1163,16 @@
   ],
   "inMemoryKeyPool": [
     {
-      "key_id": "key-env-active",
-      "masked_key": "AQ.A...gPUw",
-      "raw_key": "AQ.Ab8RN6JNC4i_lM3y8zWfqLYYz8d6b3iOrVKzq9PbhVH6rngPUw",
+      "key_id": "key-system-env",
+      "masked_key": "AIza...Knh0",
+      "raw_key": "AIzaSyAsJmHc_ZNiAG6gVjZiwMIkgdleYXHKnh0",
       "label": "Primary Gemini Cloud Key",
       "active": true,
       "status": "HEALTHY",
-      "last_used": "Verified Live",
-      "request_count": 1,
+      "last_used": "In Active Use",
+      "request_count": 9,
       "error_count": 0,
-      "avg_latency_ms": 1065
+      "avg_latency_ms": 2168
     }
   ],
   "storageDrives": [
@@ -1319,7 +1322,7 @@
     "version": "2026.8.2",
     "locationName": "Home Assistant OS (Humayun Residence)",
     "mode": "EDGE_SANDBOX",
-    "lastSynced": "2026-09-03 08:01:33",
+    "lastSynced": "2026-09-06 09:37:53",
     "entitiesCount": 18
   },
   "automationExecutionEvents": [

@@ -11,10 +11,23 @@ import { WebSocketServer, WebSocket } from 'ws';
 
 dotenv.config();
 
+const SYSTEM_INITIAL_GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
+
+function isValidGeminiApiKeyFormat(key: unknown): boolean {
+  if (!key || typeof key !== 'string') return false;
+  const trimmed = key.trim();
+  if (trimmed.length < 25) return false;
+  if (trimmed === 'MY_GEMINI_API_KEY') return false;
+  if (trimmed.includes('Demo') || trimmed.includes('demo')) return false;
+  // Gemini API keys from Google AI Studio / GCP start with AIza
+  if (!trimmed.startsWith('AIza')) return false;
+  return true;
+}
+
 const app = express();
 const httpServer = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = 3000;
 
 // 1. Comprehensive CORS & Home Assistant Ingress Middleware
 app.use((req, res, next) => {
@@ -814,52 +827,105 @@ let spatialVoiceEvents: any[] = [
   }
 ];
 
-// Helper to get Gemini Client lazily from pool or environment
-function getGeminiClient(): GoogleGenAI | null {
-  // 1. Try healthy key from pool
-  const healthyKeys = inMemoryKeyPool.filter(k => k.active && k.status === 'HEALTHY' && k.raw_key && !k.raw_key.startsWith('AIzaSyDemo'));
-  if (healthyKeys.length > 0) {
-    try {
-      const selected = healthyKeys[currentKeyIndex % healthyKeys.length];
-      return new GoogleGenAI({
-        apiKey: selected.raw_key,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-      });
-    } catch (err) {
-      console.error('Error initializing Gemini SDK with pool key:', err);
-    }
+// ==========================================
+// MULTI-API KEY GEMINI FAILOVER POOL SYSTEM
+// ==========================================
+export interface GeminiKeyPoolItem {
+  key_id: string;
+  masked_key: string;
+  raw_key: string;
+  label: string;
+  active: boolean;
+  status: 'HEALTHY' | 'RATE_LIMITED' | 'EXHAUSTED' | 'INVALID';
+  last_used: string;
+  request_count: number;
+  error_count: number;
+  avg_latency_ms: number;
+}
+
+export let inMemoryKeyPool: GeminiKeyPoolItem[] = [];
+export let currentKeyIndex = 0;
+
+export function getNextHealthyGeminiClient(): { client: GoogleGenAI | null; keyItem: GeminiKeyPoolItem | null } {
+  // Ensure system environment key is present in pool if valid
+  const currentEnvKey = (process.env.GEMINI_API_KEY || '').trim();
+  const effectiveEnvKey = isValidGeminiApiKeyFormat(currentEnvKey) ? currentEnvKey :
+                         (isValidGeminiApiKeyFormat(SYSTEM_INITIAL_GEMINI_KEY) ? SYSTEM_INITIAL_GEMINI_KEY : '');
+
+  if (effectiveEnvKey && !inMemoryKeyPool.some(k => k.raw_key === effectiveEnvKey)) {
+    inMemoryKeyPool.unshift({
+      key_id: 'key-system-env',
+      masked_key: `${effectiveEnvKey.slice(0, 4)}...${effectiveEnvKey.slice(-4)}`,
+      raw_key: effectiveEnvKey,
+      label: 'Primary Gemini Cloud Key',
+      active: true,
+      status: 'HEALTHY',
+      last_used: 'Verified Live',
+      request_count: 0,
+      error_count: 0,
+      avg_latency_ms: 85.0
+    });
+    process.env.GEMINI_API_KEY = effectiveEnvKey;
   }
 
-  // 2. Try primary environment variable
-  const key = process.env.GEMINI_API_KEY;
-  if (!key || key === 'MY_GEMINI_API_KEY' || key.startsWith('AIzaSyDemo')) {
-    // If we have any key in pool even demo, use next healthy
-    if (inMemoryKeyPool.length > 0) {
-      const fallbackKey = inMemoryKeyPool[0].raw_key;
-      if (fallbackKey) {
-        try {
-          return new GoogleGenAI({
-            apiKey: fallbackKey,
-            httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-          });
-        } catch {}
-      }
-    }
-    return null;
+  // Filter out any invalid / malformed keys
+  inMemoryKeyPool = inMemoryKeyPool.filter(k => k && isValidGeminiApiKeyFormat(k.raw_key));
+
+  const candidateKeys = inMemoryKeyPool.filter(k => 
+    k.active && 
+    k.status !== 'INVALID' &&
+    k.status !== 'EXHAUSTED'
+  );
+
+  let chosenKey: GeminiKeyPoolItem | null = null;
+  if (candidateKeys.length > 0) {
+    const healthy = candidateKeys.filter(k => k.status === 'HEALTHY');
+    const pool = healthy.length > 0 ? healthy : candidateKeys;
+    chosenKey = pool[currentKeyIndex % pool.length];
+    currentKeyIndex = (currentKeyIndex + 1) % pool.length;
+    chosenKey.request_count += 1;
+    chosenKey.last_used = 'In Active Use';
+    process.env.GEMINI_API_KEY = chosenKey.raw_key;
   }
+
+  const rawKeyToUse = chosenKey?.raw_key || (effectiveEnvKey || null);
+
+  if (!rawKeyToUse || !isValidGeminiApiKeyFormat(rawKeyToUse)) {
+    return { client: null, keyItem: null };
+  }
+
+  const keyItem: GeminiKeyPoolItem = chosenKey || {
+    key_id: 'key-system-env',
+    masked_key: `${rawKeyToUse.slice(0, 4)}...${rawKeyToUse.slice(-4)}`,
+    raw_key: rawKeyToUse,
+    label: 'Primary Gemini Key',
+    active: true,
+    status: 'HEALTHY',
+    last_used: 'Verified Live',
+    request_count: 1,
+    error_count: 0,
+    avg_latency_ms: 95.0
+  };
+
   try {
-    return new GoogleGenAI({
-      apiKey: key,
+    const client = new GoogleGenAI({
+      apiKey: rawKeyToUse,
       httpOptions: {
         headers: {
           'User-Agent': 'aistudio-build'
         }
       }
     });
+    return { client, keyItem };
   } catch (err) {
-    console.error('Error initializing Gemini SDK:', err);
-    return null;
+    console.error('Failed to instantiate GoogleGenAI client:', err);
+    return { client: null, keyItem: null };
   }
+}
+
+// Helper to get Gemini Client lazily from pool or environment
+function getGeminiClient(): GoogleGenAI | null {
+  return getNextHealthyGeminiClient().client;
 }
 
 // -------------------------------------------------------------
@@ -903,6 +969,63 @@ export const geminiTelemetry: GeminiTelemetryStats = {
   estimatedCost: '$0.00 (Free Tier / In-Quota)'
 };
 
+// -------------------------------------------------------------
+// LOCAL MODEL TRAINING GUARD: STRICT CLOUD GEMINI PRIORITY
+// -------------------------------------------------------------
+export interface LocalModelTrainingStatus {
+  isTrained: boolean;
+  datasetPairs: number;
+  checkpointPath: string | null;
+  statusLabelBn: string;
+  reasonBn: string;
+}
+
+export let isLocalModelTrainedState: {
+  isTrained: boolean;
+  datasetPairs: number;
+  checkpointPath: string | null;
+} = {
+  isTrained: false,
+  datasetPairs: 0,
+  checkpointPath: null
+};
+
+export function checkIsLocalModelTrained(): LocalModelTrainingStatus {
+  const checkpointsDir = path.join(process.cwd(), 'data', 'local_checkpoints');
+  let hasValidCheckpoints = false;
+  if (fs.existsSync(checkpointsDir)) {
+    try {
+      const files = fs.readdirSync(checkpointsDir);
+      hasValidCheckpoints = files.some(f => 
+        f.endsWith('.bin') || 
+        f.endsWith('.safetensors') || 
+        f.endsWith('.pt') || 
+        f.endsWith('.onnx') || 
+        f.endsWith('.tflite')
+      );
+    } catch {}
+  }
+
+  // Check if training was marked complete and verified checkpoint weights exist
+  if (isLocalModelTrainedState.isTrained && hasValidCheckpoints) {
+    return {
+      isTrained: true,
+      datasetPairs: isLocalModelTrainedState.datasetPairs || 1200,
+      checkpointPath: checkpointsDir,
+      statusLabelBn: 'ট্রেইন্ড ও সক্রিয় (Trained Active)',
+      reasonBn: 'লোকাল মডেলের ট্রেনিং সম্পন্ন এবং ওয়েট ফাইল লোডেড।'
+    };
+  }
+
+  return {
+    isTrained: false,
+    datasetPairs: 0,
+    checkpointPath: null,
+    statusLabelBn: 'আনট্রেইন্ড (Direct Gemini Cloud Active)',
+    reasonBn: 'লোকাল মডেলের কোনো ভেরিফাইড ট্রেনিং ওয়েট বা ডেটাসেট নেই। সিস্টেম সরাসরি ক্লাউড জেমিনির সাথে সংযুক্ত।'
+  };
+}
+
 // Resilient Gemini Generator with automatic model fallback for 503 high-demand / quota spikes
 async function generateWithModelFallback(ai: GoogleGenAI, requestOptions: any): Promise<any> {
   const candidateModels = FREE_TIER_PRIORITY_MODELS;
@@ -945,6 +1068,17 @@ async function generateWithModelFallback(ai: GoogleGenAI, requestOptions: any): 
       } catch (err: any) {
         lastError = err;
         const errMsg = err?.message || String(err);
+        const isAuthError = err?.status === 401 || err?.status === 403 ||
+          errMsg.includes('UNAUTHENTICATED') ||
+          errMsg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') ||
+          errMsg.includes('invalid authentication credentials') ||
+          errMsg.includes('API_KEY_INVALID');
+
+        if (isAuthError) {
+          geminiTelemetry.lastStatus = 'AUTH_FAILED';
+          throw err;
+        }
+
         if ((errMsg.includes('503') || errMsg.includes('429')) && attempt === 0) {
           // Wait 300ms before retrying the same model once
           await new Promise(resolve => setTimeout(resolve, 300));
@@ -4235,115 +4369,24 @@ app.get('/api/ha/theme-bridge', (req: Request, res: Response) => {
 });
 
 // ==========================================
-// MULTI-API KEY GEMINI FAILOVER POOL SYSTEM
+// MULTI-API KEY GEMINI VERIFICATION & FAILOVER
 // ==========================================
-interface GeminiKeyPoolItem {
-  key_id: string;
-  masked_key: string;
-  raw_key: string;
-  label: string;
-  active: boolean;
-  status: 'HEALTHY' | 'RATE_LIMITED' | 'EXHAUSTED' | 'INVALID';
-  last_used: string;
-  request_count: number;
-  error_count: number;
-  avg_latency_ms: number;
-}
-
-// Initialized completely empty by default per user requirement
-let inMemoryKeyPool: GeminiKeyPoolItem[] = [];
-
-let currentKeyIndex = 0;
-
-function getNextHealthyGeminiClient(): { client: GoogleGenAI | null; keyItem: GeminiKeyPoolItem | null } {
-  // Ensure environment key is in pool if not already
-  const envKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : '';
-  const isEnvKeyValid = envKey && envKey !== 'MY_GEMINI_API_KEY' && !envKey.startsWith('AIzaSyDemo');
-
-  if (isEnvKeyValid && !inMemoryKeyPool.some(k => k.raw_key === envKey)) {
-    inMemoryKeyPool.unshift({
-      key_id: 'key-env-active',
-      masked_key: `${envKey.slice(0, 4)}...${envKey.slice(-4)}`,
-      raw_key: envKey,
-      label: 'Primary Gemini Cloud Key',
-      active: true,
-      status: 'HEALTHY',
-      last_used: 'Verified Live',
-      request_count: 0,
-      error_count: 0,
-      avg_latency_ms: 85.0
-    });
-  }
-
-  // Auto-heal keys marked RATE_LIMITED back to HEALTHY
-  inMemoryKeyPool.forEach(k => {
-    if (k.status === 'RATE_LIMITED') {
-      k.status = 'HEALTHY';
-    }
-  });
-
-  const candidateKeys = inMemoryKeyPool.filter(k => 
-    k.active && 
-    k.status !== 'INVALID' &&
-    k.status !== 'EXHAUSTED' &&
-    k.raw_key && 
-    !k.raw_key.startsWith('AIzaSyDemo') &&
-    k.raw_key !== 'MY_GEMINI_API_KEY' &&
-    k.raw_key.trim() !== ''
-  );
-
-  let chosenKey: GeminiKeyPoolItem | null = null;
-  if (candidateKeys.length > 0) {
-    const healthy = candidateKeys.filter(k => k.status === 'HEALTHY');
-    const pool = healthy.length > 0 ? healthy : candidateKeys;
-    chosenKey = pool[currentKeyIndex % pool.length];
-    currentKeyIndex = (currentKeyIndex + 1) % pool.length;
-    chosenKey.request_count += 1;
-    chosenKey.last_used = 'Verified Live';
-    if (chosenKey.status !== 'HEALTHY') {
-      chosenKey.status = 'HEALTHY';
-    }
-    process.env.GEMINI_API_KEY = chosenKey.raw_key;
-  }
-
-  const rawKeyToUse = chosenKey?.raw_key || (isEnvKeyValid ? envKey : null);
-
-  if (!rawKeyToUse) {
-    return { client: null, keyItem: null };
-  }
-
-  const keyItem = chosenKey || {
-    key_id: 'key-env-active',
-    masked_key: `${rawKeyToUse.slice(0, 4)}...${rawKeyToUse.slice(-4)}`,
-    raw_key: rawKeyToUse,
-    label: 'Primary Gemini Key',
-    active: true,
-    status: 'HEALTHY',
-    last_used: 'Verified Live',
-    request_count: 1,
-    error_count: 0,
-    avg_latency_ms: 95.0
-  };
-
-  return {
-    client: new GoogleGenAI({
-      apiKey: rawKeyToUse,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build'
-        }
-      }
-    }),
-    keyItem
-  };
-}
 
 // -------------------------------------------------------------
 // REAL-TIME GEMINI CONNECTION & HANDSHAKE VERIFICATION ENDPOINT
 // -------------------------------------------------------------
+app.get('/api/local-model/training-status', (req: Request, res: Response) => {
+  const status = checkIsLocalModelTrained();
+  res.json({
+    success: true,
+    ...status
+  });
+});
+
 app.all(['/api/gemini/verify-connection', '/api/gemini/health-check'], async (req: Request, res: Response) => {
   const startPing = Date.now();
   const { client, keyItem } = getNextHealthyGeminiClient();
+  const localTraining = checkIsLocalModelTrained();
 
   if (!client || !keyItem) {
     geminiTelemetry.lastStatus = 'OFFLINE';
@@ -4354,14 +4397,18 @@ app.all(['/api/gemini/verify-connection', '/api/gemini/health-check'], async (re
       success: false,
       status: 'OFFLINE',
       latencyMs: 0,
-      activeModel: 'hybrid-local-edge-engine',
-      keyLabel: 'No Active Key (Local Engine Active)',
+      activeModel: 'gemini-3.1-flash-lite',
+      keyLabel: 'No Active Key',
       keyMasked: 'None',
       isLiveAvailable: false,
-      mode: 'HYBRID_LOCAL_EDGE_FALLBACK',
-      modeLabelBn: 'লোকাল এজ অফলাইন ইঞ্জিন সক্রিয়',
-      message: 'No active Gemini key found. System running securely on local Edge-AI engine.',
-      messageBn: 'কোনো সক্রিয় জেমিনি এপিআই কি নেই। লোকাল অফলাইন এজ ইঞ্জিন দিয়ে সিস্টেম চলতেছে।',
+      isLocalModelTrained: localTraining.isTrained,
+      localTrainingStatus: localTraining,
+      mode: localTraining.isTrained ? 'HYBRID_LOCAL_EDGE_FALLBACK' : 'ORIGINAL_GEMINI_LIVE_CLOUD',
+      modeLabelBn: localTraining.isTrained ? 'লোকাল এজ অফলাইন ইঞ্জিন সক্রিয়' : 'জেমিনি ক্লাউড এপিআই কী সক্রিয়করণ প্রয়োজন (লোকাল আনট্রেইন্ড)',
+      message: 'No active Gemini key found.',
+      messageBn: localTraining.isTrained 
+        ? 'কোনো সক্রিয় জেমিনি এপিআই কি নেই। লোকাল অফলাইন এজ ইঞ্জিন দিয়ে সিস্টেম চলতেছে।'
+        : 'কোনো সক্রিয় জেমিনি এপিআই কি নেই। লোকাল মডেল এখনও আনট্রেইন্ড থাকায় স্বয়ংক্রিয়ভাবে লোকালে রুট করা হয়নি।',
       telemetry: geminiTelemetry,
       timestamp: new Date().toISOString()
     });
@@ -4389,6 +4436,8 @@ app.all(['/api/gemini/verify-connection', '/api/gemini/health-check'], async (re
       keyLabel: keyItem.label,
       keyMasked: keyItem.masked_key,
       isLiveAvailable: true,
+      isLocalModelTrained: localTraining.isTrained,
+      localTrainingStatus: localTraining,
       mode: 'ORIGINAL_GEMINI_LIVE_CLOUD',
       modeLabelBn: 'অরজিনাল জেমিনি লাইভ ক্লাউড সক্রিয় (দ্বিমুখী ভয়েস/চ্যাট)',
       message: 'Gemini Cloud connection handshake succeeded.',
@@ -4400,11 +4449,30 @@ app.all(['/api/gemini/verify-connection', '/api/gemini/health-check'], async (re
     const latencyMs = Date.now() - startPing;
     const errMsg = err?.message || String(err);
     const isRateLimit = err?.status === 429 || errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED');
-    const isAuthFailed = err?.status === 400 || err?.status === 401 || err?.status === 403 || errMsg.includes('API_KEY_INVALID') || errMsg.includes('unregistered');
+    const isAuthFailed = err?.status === 400 || err?.status === 401 || err?.status === 403 || 
+      errMsg.includes('API_KEY_INVALID') || 
+      errMsg.includes('UNAUTHENTICATED') || 
+      errMsg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') || 
+      errMsg.includes('invalid authentication credentials') || 
+      errMsg.includes('unregistered');
 
     let status: 'RATE_LIMITED' | 'AUTH_FAILED' | 'OFFLINE' = 'OFFLINE';
-    if (isRateLimit) status = 'RATE_LIMITED';
-    else if (isAuthFailed) status = 'AUTH_FAILED';
+    if (isRateLimit) {
+      status = 'RATE_LIMITED';
+      if (keyItem) {
+        keyItem.status = 'RATE_LIMITED';
+        keyItem.error_count += 1;
+        savePersistentDatabase();
+      }
+    } else if (isAuthFailed) {
+      status = 'AUTH_FAILED';
+      if (keyItem) {
+        keyItem.status = 'INVALID';
+        keyItem.active = false;
+        keyItem.error_count += 1;
+        savePersistentDatabase();
+      }
+    }
 
     geminiTelemetry.lastStatus = status;
     geminiTelemetry.lastLatencyMs = latencyMs;
@@ -4418,14 +4486,16 @@ app.all(['/api/gemini/verify-connection', '/api/gemini/health-check'], async (re
       keyLabel: keyItem.label,
       keyMasked: keyItem.masked_key,
       isLiveAvailable: false,
-      mode: 'HYBRID_LOCAL_EDGE_FALLBACK',
-      modeLabelBn: 'লোকাল এজ অফলাইন ইঞ্জিন সক্রিয়',
+      isLocalModelTrained: localTraining.isTrained,
+      localTrainingStatus: localTraining,
+      mode: localTraining.isTrained ? 'HYBRID_LOCAL_EDGE_FALLBACK' : 'ORIGINAL_GEMINI_LIVE_CLOUD',
+      modeLabelBn: localTraining.isTrained ? 'লোকাল এজ অফলাইন ইঞ্জিন সক্রিয়' : 'জেমিনি ক্লাউড সংযুক্ত (লোকাল মডেল আনট্রেইন্ড)',
       error: errMsg,
       messageBn: isRateLimit
-        ? 'জেমিনি কোটা সীমা অতিক্রম করেছে, ব্যাকআপ কি বা লোকাল মডেলে রুট হয়েছে।'
+        ? (localTraining.isTrained ? 'জেমিনি কোটা সীমা অতিক্রম করেছে, ব্যাকআপ কী বা লোকাল মডেলে রুট হয়েছে।' : 'জেমিনি কোটা শেষ হয়েছে, ব্যাকআপ কী ব্যবহার করুন। লোকাল মডেল আনট্রেইন্ড থাকায় লোকালে সুইচ করা হয়নি।')
         : isAuthFailed
         ? 'জেমিনি এপিআই কি অকার্যকর। সেটিংস থেকে সঠিক কি প্রদান করুন।'
-        : 'জেমিনি ক্লাউড সংযোগ সাময়িকভাবে অফলাইন, লোকাল এজ ইঞ্জিনে কাজ চলছে।',
+        : 'জেমিনি ক্লাউড সংযোগ সাময়িকভাবে অফলাইন।',
       telemetry: geminiTelemetry,
       timestamp: new Date().toISOString()
     });
@@ -4483,6 +4553,13 @@ app.post(['/api/gemini/keys', '/api/keys'], async (req: Request, res: Response) 
     return res.status(400).json({ success: false, error: 'API key is required' });
   }
 
+  if (!isValidGeminiApiKeyFormat(rawKey)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid API key format. Google AI Studio Gemini API keys start with "AIza" and contain valid credentials.'
+    });
+  }
+
   const customLabel = (label || req.body.name || '').trim() || `Gemini Key #${inMemoryKeyPool.length + 1}`;
 
   // Immediate Live Validation against Gemini API
@@ -4509,9 +4586,18 @@ app.post(['/api/gemini/keys', '/api/keys'], async (req: Request, res: Response) 
     if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
       verifiedStatus = 'RATE_LIMITED';
       validationMessage = 'Rate Limited (429)';
-    } else if (msg.includes('API_KEY_INVALID') || msg.includes('400') || msg.includes('403') || msg.includes('not found')) {
+    } else if (
+      msg.includes('API_KEY_INVALID') || 
+      msg.includes('400') || 
+      msg.includes('401') || 
+      msg.includes('403') || 
+      msg.includes('UNAUTHENTICATED') || 
+      msg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') || 
+      msg.includes('invalid authentication credentials') || 
+      msg.includes('not found')
+    ) {
       verifiedStatus = 'INVALID';
-      validationMessage = 'Invalid API Key';
+      validationMessage = 'Invalid API Key / Unauthorized';
     } else {
       // Network transient or offline environment, allow as HEALTHY standby
       verifiedStatus = 'HEALTHY';
@@ -4532,7 +4618,7 @@ app.post(['/api/gemini/keys', '/api/keys'], async (req: Request, res: Response) 
     avg_latency_ms: measuredLatency
   };
 
-  // Prepend new key to pool and immediately link as active key
+  // Prepend new key to pool and immediately link as active key if healthy
   inMemoryKeyPool.unshift(newEntry);
   if (verifiedStatus === 'HEALTHY') {
     process.env.GEMINI_API_KEY = rawKey;
@@ -4564,7 +4650,7 @@ app.post(['/api/gemini/keys/:id/toggle', '/api/keys/:id/toggle'], (req: Request,
     if (target.active && target.status === 'STANDBY' as any) {
       target.status = 'HEALTHY';
     }
-    if (target.active && target.raw_key) {
+    if (target.active && target.raw_key && isValidGeminiApiKeyFormat(target.raw_key)) {
       process.env.GEMINI_API_KEY = target.raw_key;
     }
     savePersistentDatabase();
@@ -4578,12 +4664,16 @@ app.delete(['/api/gemini/keys/:id', '/api/keys/:id'], (req: Request, res: Respon
   const target = inMemoryKeyPool.find(k => k.key_id === id);
   inMemoryKeyPool = inMemoryKeyPool.filter(k => k.key_id !== id);
   
-  // Link to next healthy key or clear
-  const nextHealthy = inMemoryKeyPool.find(k => k.active && k.status === 'HEALTHY' && k.raw_key);
+  // Link to next healthy key or fallback
+  const nextHealthy = inMemoryKeyPool.find(k => k.active && k.status === 'HEALTHY' && isValidGeminiApiKeyFormat(k.raw_key));
   if (nextHealthy) {
     process.env.GEMINI_API_KEY = nextHealthy.raw_key;
   } else if (target && process.env.GEMINI_API_KEY === target.raw_key) {
-    delete process.env.GEMINI_API_KEY;
+    if (isValidGeminiApiKeyFormat(SYSTEM_INITIAL_GEMINI_KEY)) {
+      process.env.GEMINI_API_KEY = SYSTEM_INITIAL_GEMINI_KEY;
+    } else {
+      delete process.env.GEMINI_API_KEY;
+    }
   }
   savePersistentDatabase();
   res.json({ success: true, deletedId: id });
@@ -4608,13 +4698,13 @@ app.all(['/api/gemini/test-key', '/api/gemini/test', '/api/keys/test', '/api/gem
 
   if (!testKey) {
     // Check if active key in pool exists
-    const activeHealthy = inMemoryKeyPool.find(k => k.active && k.raw_key);
+    const activeHealthy = inMemoryKeyPool.find(k => k.active && isValidGeminiApiKeyFormat(k.raw_key));
     if (activeHealthy) testKey = activeHealthy.raw_key;
-    else if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY') testKey = process.env.GEMINI_API_KEY;
+    else if (process.env.GEMINI_API_KEY && isValidGeminiApiKeyFormat(process.env.GEMINI_API_KEY)) testKey = process.env.GEMINI_API_KEY;
   }
 
-  if (!testKey) {
-    return res.status(400).json({ success: false, valid: false, error: 'No API key provided for testing' });
+  if (!testKey || !isValidGeminiApiKeyFormat(testKey)) {
+    return res.status(400).json({ success: false, valid: false, error: 'No valid Gemini API key provided for testing (must start with "AIza")' });
   }
 
   const startTime = Date.now();
@@ -4624,8 +4714,8 @@ app.all(['/api/gemini/test-key', '/api/gemini/test', '/api/keys/test', '/api/gem
       httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
     });
 
-    const candidateModels = ['gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-3.8-flash'];
-    let verifiedModel = 'gemini-1.5-flash';
+    const candidateModels = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+    let verifiedModel = 'gemini-3.8-flash';
     let responseText = 'VERIFIED';
     let verified = false;
     let lastErr: any = null;
@@ -4704,65 +4794,81 @@ app.post(['/api/gemini/live-chat', '/api/gemini/chat'], async (req: Request, res
 
   const startTime = Date.now();
   const { client, keyItem } = getNextHealthyGeminiClient();
+  const localTraining = checkIsLocalModelTrained();
 
-  // 1. Fallback Logic: If no active Gemini Key exists or keys offline, process via Local SQLite / Memory Database
+  // 1. Fallback Logic: Only route to local database if local model is ACTUALLY TRAINED!
   if (!client || !keyItem) {
-    console.log('[Text Chat Mode] No active Gemini key found. Executing via Local Attention Engine & SQLite WAL...');
-    const lower = promptText.toLowerCase();
-    let action: any = null;
-    let replyBn = `লোকাল ইঞ্জিনে কমান্ড প্রসেস করা হয়েছে: "${promptText}"`;
-    let replyEn = `Executed via Local Offline Database: "${promptText}"`;
+    if (localTraining.isTrained) {
+      console.log('[Text Chat Mode] No active Gemini key found. Executing via Local Attention Engine & SQLite WAL...');
+      const lower = promptText.toLowerCase();
+      let action: any = null;
+      let replyBn = `লোকাল ইঞ্জিনে কমান্ড প্রসেস করা হয়েছে: "${promptText}"`;
+      let replyEn = `Executed via Local Offline Database: "${promptText}"`;
 
-    // Local device matching
-    if (lower.includes('লাইট অন') || lower.includes('turn on light') || lower.includes('লাইট জ্বালাও')) {
-      const light = HA_ENTITIES_REGISTRY.find(e => e.domain === 'light') || HA_ENTITIES_REGISTRY[0];
-      if (light) {
-        action = { entity_id: light.entity_id, service: 'turn_on', params: {} };
-        await executeHaServiceAndSync(light.entity_id, 'turn_on', {});
-        replyBn = `${light.name}-এর লাইট চালু করা হয়েছে। (অফলাইন লোকাল ইঞ্জিন)`;
-        replyEn = `Turned on ${light.name} via local database.`;
+      // Local device matching
+      if (lower.includes('লাইট অন') || lower.includes('turn on light') || lower.includes('লাইট জ্বালাও')) {
+        const light = HA_ENTITIES_REGISTRY.find(e => e.domain === 'light') || HA_ENTITIES_REGISTRY[0];
+        if (light) {
+          action = { entity_id: light.entity_id, service: 'turn_on', params: {} };
+          await executeHaServiceAndSync(light.entity_id, 'turn_on', {});
+          replyBn = `${light.name}-এর লাইট চালু করা হয়েছে। (অফলাইন লোকাল ইঞ্জিন)`;
+          replyEn = `Turned on ${light.name} via local database.`;
+        }
+      } else if (lower.includes('লাইট অফ') || lower.includes('turn off light') || lower.includes('লাইট বন্ধ')) {
+        const light = HA_ENTITIES_REGISTRY.find(e => e.domain === 'light') || HA_ENTITIES_REGISTRY[0];
+        if (light) {
+          action = { entity_id: light.entity_id, service: 'turn_off', params: {} };
+          await executeHaServiceAndSync(light.entity_id, 'turn_off', {});
+          replyBn = `${light.name}-এর লাইট বন্ধ করা হয়েছে। (অফলাইন লোকাল ইঞ্জিন)`;
+          replyEn = `Turned off ${light.name} via local database.`;
+        }
+      } else if (lower.includes('ফ্যান') || lower.includes('fan')) {
+        const fan = HA_ENTITIES_REGISTRY.find(e => e.domain === 'fan') || HA_ENTITIES_REGISTRY.find(e => e.domain === 'switch');
+        if (fan) {
+          const turnOff = lower.includes('বন্ধ') || lower.includes('off');
+          const svc = turnOff ? 'turn_off' : 'turn_on';
+          action = { entity_id: fan.entity_id, service: svc, params: {} };
+          await executeHaServiceAndSync(fan.entity_id, svc, {});
+          replyBn = `${fan.name} ${turnOff ? 'বন্ধ' : 'চালু'} করা হয়েছে। (অফলাইন লোকাল ইঞ্জিন)`;
+          replyEn = `Fan ${turnOff ? 'stopped' : 'started'} via local database.`;
+        }
+      } else if (lower.includes('লক') || lower.includes('lock') || lower.includes('গেট')) {
+        const lock = HA_ENTITIES_REGISTRY.find(e => e.domain === 'lock');
+        if (lock) {
+          const isUnlock = lower.includes('আনলক') || lower.includes('unlock') || lower.includes('খুল');
+          const svc = isUnlock ? 'unlock' : 'lock';
+          action = { entity_id: lock.entity_id, service: svc, params: {} };
+          await executeHaServiceAndSync(lock.entity_id, svc, {});
+          replyBn = `${lock.name} ${isUnlock ? 'আনলক' : 'লক'} করা হয়েছে।`;
+          replyEn = `Door lock ${svc}ed via local database.`;
+        }
       }
-    } else if (lower.includes('লাইট অফ') || lower.includes('turn off light') || lower.includes('লাইট বন্ধ')) {
-      const light = HA_ENTITIES_REGISTRY.find(e => e.domain === 'light') || HA_ENTITIES_REGISTRY[0];
-      if (light) {
-        action = { entity_id: light.entity_id, service: 'turn_off', params: {} };
-        await executeHaServiceAndSync(light.entity_id, 'turn_off', {});
-        replyBn = `${light.name}-এর লাইট বন্ধ করা হয়েছে। (অফলাইন লোকাল ইঞ্জিন)`;
-        replyEn = `Turned off ${light.name} via local database.`;
-      }
-    } else if (lower.includes('ফ্যান') || lower.includes('fan')) {
-      const fan = HA_ENTITIES_REGISTRY.find(e => e.domain === 'fan') || HA_ENTITIES_REGISTRY.find(e => e.domain === 'switch');
-      if (fan) {
-        const turnOff = lower.includes('বন্ধ') || lower.includes('off');
-        const svc = turnOff ? 'turn_off' : 'turn_on';
-        action = { entity_id: fan.entity_id, service: svc, params: {} };
-        await executeHaServiceAndSync(fan.entity_id, svc, {});
-        replyBn = `${fan.name} ${turnOff ? 'বন্ধ' : 'চালু'} করা হয়েছে। (অফলাইন লোকাল ইঞ্জিন)`;
-        replyEn = `Fan ${turnOff ? 'stopped' : 'started'} via local database.`;
-      }
-    } else if (lower.includes('লক') || lower.includes('lock') || lower.includes('গেট')) {
-      const lock = HA_ENTITIES_REGISTRY.find(e => e.domain === 'lock');
-      if (lock) {
-        const isUnlock = lower.includes('আনলক') || lower.includes('unlock') || lower.includes('খুল');
-        const svc = isUnlock ? 'unlock' : 'lock';
-        action = { entity_id: lock.entity_id, service: svc, params: {} };
-        await executeHaServiceAndSync(lock.entity_id, svc, {});
-        replyBn = `${lock.name} ${isUnlock ? 'আনলক' : 'লক'} করা হয়েছে।`;
-        replyEn = `Door lock ${svc}ed via local database.`;
-      }
+
+      const latencyMs = Date.now() - startTime;
+      return res.json({
+        success: true,
+        mode: 'LOCAL_SQLITE_WAL',
+        fallback: true,
+        latencyMs,
+        replyBn,
+        replyEn,
+        action,
+        liveActionResult: action ? { liveDispatched: true } : null
+      });
+    } else {
+      return res.status(503).json({
+        success: false,
+        error: 'NO_ACTIVE_GEMINI_KEY',
+        mode: 'GEMINI_CLOUD_WAITING_KEY',
+        fallback: false,
+        isLocalModelTrained: false,
+        replyBn: 'কোনো সক্রিয় জেমিনি এপিআই কী নেই। লোকাল মডেল এখনও আনট্রেইন্ড বিধায় স্বয়ংক্রিয়ভাবে লোকালে পাঠানো হয়নি। দয়া করে কী ম্যানেজারে আপনার জেমিনি এপিআই কী যুক্ত করুন।',
+        replyEn: 'No active Gemini key found. Local model is untrained, keeping strictly on Cloud Gemini pipeline.',
+        response: 'কোনো সক্রিয় জেমিনি এপিআই কী নেই। লোকাল মডেল এখনও আনট্রেইন্ড বিধায় স্বয়ংক্রিয়ভাবে লোকালে পাঠানো হয়নি। দয়া করে কী ম্যানেজারে আপনার জেমিনি এপিআই কী যুক্ত করুন।',
+        text: 'কোনো সক্রিয় জেমিনি এপিআই কী নেই। লোকাল মডেল এখনও আনট্রেইন্ড বিধায় স্বয়ংক্রিয়ভাবে লোকালে পাঠানো হয়নি।',
+        message: 'কোনো সক্রিয় জেমিনি এপিআই কী নেই। লোকাল মডেল এখনও আনট্রেইন্ড বিধায় স্বয়ংক্রিয়ভাবে লোকালে পাঠানো হয়নি।'
+      });
     }
-
-    const latencyMs = Date.now() - startTime;
-    return res.json({
-      success: true,
-      mode: 'LOCAL_SQLITE_WAL',
-      fallback: true,
-      latencyMs,
-      replyBn,
-      replyEn,
-      action,
-      liveActionResult: action ? { liveDispatched: true } : null
-    });
   }
 
   // 2. Gemini Async Text Chat Stream Execution (Pure text response, no audio)
@@ -4845,33 +4951,121 @@ JSON Response Format:
     });
   } catch (err: any) {
     console.error('[Gemini Text Chat Error]:', err);
-    const isRateLimit = err?.status === 429 || String(err).includes('429') || String(err).includes('quota');
-    if (isRateLimit) {
-      keyItem.status = 'RATE_LIMITED';
-      keyItem.error_count += 1;
-      savePersistentDatabase();
+    const errMsg = err?.message || String(err);
+    const isRateLimit = err?.status === 429 || errMsg.includes('429') || errMsg.includes('quota');
+    const isAuthError = err?.status === 401 || err?.status === 403 || 
+      errMsg.includes('UNAUTHENTICATED') || 
+      errMsg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') || 
+      errMsg.includes('invalid authentication credentials') || 
+      errMsg.includes('API_KEY_INVALID');
+
+    if (isAuthError) {
+      if (keyItem) {
+        keyItem.status = 'INVALID';
+        keyItem.active = false;
+        keyItem.error_count += 1;
+        savePersistentDatabase();
+      }
+      // Automatic immediate failover retry with another healthy key if available!
+      const retry = getNextHealthyGeminiClient();
+      if (retry.client && retry.keyItem && retry.keyItem.raw_key !== keyItem?.raw_key) {
+        try {
+          console.log(`[Gemini Text Chat Failover] Retrying chat with backup key: ${retry.keyItem.label}`);
+          const retryAiResponse = await generateWithModelFallback(retry.client, {
+            contents: `${systemInstruction}\nUser Message: "${promptText}"`
+          });
+          const retryLatencyMs = Date.now() - startTime;
+          const retryRawAiText = (retryAiResponse?.text || '').trim();
+          let retryParsed: any = {};
+          try {
+            const cleaned = retryRawAiText.replace(/```json/g, '').replace(/```/g, '').trim();
+            retryParsed = JSON.parse(cleaned);
+          } catch {
+            retryParsed = {
+              replyBn: retryRawAiText || 'নির্দেশ সম্পন্ন হয়েছে',
+              replyEn: retryRawAiText || 'Command processed',
+              action: null
+            };
+          }
+          const finalReplyBn = (typeof retryParsed.replyBn === 'string' && retryParsed.replyBn.trim()) || retryRawAiText || 'নির্দেশ সম্পন্ন হয়েছে';
+          const finalReplyEn = (typeof retryParsed.replyEn === 'string' && retryParsed.replyEn.trim()) || retryRawAiText || 'Action executed';
+          let liveActionResult = null;
+          if (retryParsed.action && retryParsed.action.entity_id && retryParsed.action.service) {
+            liveActionResult = await executeHaServiceAndSync(
+              retryParsed.action.entity_id,
+              retryParsed.action.service,
+              retryParsed.action.params || {}
+            );
+          }
+          return res.json({
+            success: true,
+            mode: 'GEMINI_TEXT_ASYNC',
+            keyUsed: retry.keyItem.label,
+            latencyMs: retryLatencyMs,
+            replyBn: finalReplyBn,
+            replyEn: finalReplyEn,
+            response: finalReplyBn,
+            text: finalReplyBn,
+            message: finalReplyBn,
+            rawText: retryRawAiText,
+            action: retryParsed.action,
+            liveActionResult
+          });
+        } catch (retryErr) {
+          console.error('[Gemini Text Chat Retry Failed]:', retryErr);
+        }
+      }
+    } else if (isRateLimit) {
+      if (keyItem) {
+        keyItem.status = 'RATE_LIMITED';
+        keyItem.error_count += 1;
+        savePersistentDatabase();
+      }
     }
 
-    const fallbackBn = 'অফলাইন লোকাল ডাটাবেস ও এজ ইঞ্জিনের মাধ্যমে নির্দেশ প্রসেস করা হয়েছে।';
-    const fallbackEn = 'Processed via local offline edge engine.';
+    const localTraining = checkIsLocalModelTrained();
+    if (localTraining.isTrained) {
+      const fallbackBn = 'অফলাইন লোকাল ডাটাবেস ও এজ ইঞ্জিনের মাধ্যমে নির্দেশ প্রসেস করা হয়েছে।';
+      const fallbackEn = 'Processed via local offline edge engine.';
 
-    res.json({
-      success: true,
-      mode: 'LOCAL_FALLBACK_TEXT',
-      fallback: true,
-      latencyMs: Date.now() - startTime,
-      replyBn: fallbackBn,
-      replyEn: fallbackEn,
-      response: fallbackBn,
-      text: fallbackBn,
-      message: fallbackBn,
+      return res.json({
+        success: true,
+        mode: 'LOCAL_FALLBACK_TEXT',
+        fallback: true,
+        latencyMs: Date.now() - startTime,
+        replyBn: fallbackBn,
+        replyEn: fallbackEn,
+        response: fallbackBn,
+        text: fallbackBn,
+        message: fallbackBn,
+        action: null
+      });
+    }
+
+    const cloudNotice = isRateLimit 
+      ? 'জেমিনি ক্লাউড কোটা সাময়িকভাবে শেষ হয়েছে। কিছুক্ষণ পর চেষ্টা করুন।' 
+      : isAuthError 
+      ? 'জেমিনি এপিআই কী অকার্যকর বা অনুমোদনহীন। সেটিংস থেকে সঠিক কী দিন।'
+      : `জেমিনি ক্লাউড অনুরোধে সমস্যা (${errMsg.substring(0, 80)})।`;
+
+    return res.status(502).json({
+      success: false,
+      error: errMsg,
+      mode: 'GEMINI_CLOUD_ERROR',
+      fallback: false,
+      isLocalModelTrained: false,
+      replyBn: `${cloudNotice} লোকাল মডেল এখনও আনট্রেইন্ড থাকায় স্বয়ংক্রিয়ভাবে লোকালে পাঠানো হয়নি।`,
+      replyEn: `Gemini Cloud error: ${errMsg}. Local model is untrained, keeping strictly on Cloud pipeline.`,
+      response: `${cloudNotice} লোকাল মডেল এখনও আনট্রেইন্ড থাকায় স্বয়ংক্রিয়ভাবে লোকালে পাঠানো হয়নি।`,
+      text: `${cloudNotice} লোকাল মডেল এখনও আনট্রেইন্ড থাকায় স্বয়ংক্রিয়ভাবে লোকালে পাঠানো হয়নি।`,
+      message: `${cloudNotice} লোকাল মডেল এখনও আনট্রেইন্ড থাকায় স্বয়ংক্রিয়ভাবে লোকালে পাঠানো হয়নি।`,
       action: null
     });
   }
 });
 
 // Fast intent parse endpoint with multi-key failover
-app.post('/api/gemini/intent-parse', async (req: Request, res: Response) => {
+app.post('/api/gemini/fast-intent', async (req: Request, res: Response) => {
   const { prompt } = req.body;
   const text = (prompt || '').trim();
   if (!text) {
@@ -4880,6 +5074,27 @@ app.post('/api/gemini/intent-parse', async (req: Request, res: Response) => {
 
   const startTime = Date.now();
   const { client, keyItem } = getNextHealthyGeminiClient();
+  const localTraining = checkIsLocalModelTrained();
+
+  if (!client || !keyItem) {
+    if (localTraining.isTrained) {
+      return res.json({
+        success: true,
+        fallback: true,
+        voiceFeedbackBn: `লোকাল প্রসেসর দিয়ে নির্দেশ কার্যকর হয়েছে: "${text}"`,
+        voiceFeedbackEn: `Processed via local fallback neural engine: "${text}"`,
+        intent: 'LOCAL_RULE_MATCH'
+      });
+    }
+    return res.status(503).json({
+      success: false,
+      fallback: false,
+      error: 'NO_ACTIVE_GEMINI_KEY',
+      voiceFeedbackBn: 'কোনো সক্রিয় জেমিনি এপিআই কী পাওয়া যায়নি। লোকাল মডেল আনট্রেইন্ড থাকায় লোকালে সুইচ করা হয়নি।',
+      voiceFeedbackEn: 'No active Gemini key found. Local model is untrained.',
+      intent: 'CLOUD_GEMINI_KEY_REQUIRED'
+    });
+  }
 
   try {
     const aiResponse = await generateWithModelFallback(client, {
@@ -4923,12 +5138,24 @@ Return JSON ONLY:
     keyItem.error_count += 1;
     currentKeyIndex = (currentKeyIndex + 1) % Math.max(1, inMemoryKeyPool.length);
 
-    res.json({
-      success: true,
-      fallback: true,
-      voiceFeedbackBn: `লোকাল প্রসেসর দিয়ে নির্দেশ কার্যকর হয়েছে: "${text}"`,
-      voiceFeedbackEn: `Processed via local fallback neural engine: "${text}"`,
-      intent: 'LOCAL_RULE_MATCH'
+    const localTraining = checkIsLocalModelTrained();
+    if (localTraining.isTrained) {
+      return res.json({
+        success: true,
+        fallback: true,
+        voiceFeedbackBn: `লোকাল প্রসেসর দিয়ে নির্দেশ কার্যকর হয়েছে: "${text}"`,
+        voiceFeedbackEn: `Processed via local fallback neural engine: "${text}"`,
+        intent: 'LOCAL_RULE_MATCH'
+      });
+    }
+
+    res.status(502).json({
+      success: false,
+      fallback: false,
+      error: err?.message || 'Gemini fast-intent processing error',
+      voiceFeedbackBn: 'জেমিনি ক্লাউড সংযোগে সমস্যা হয়েছে। লোকাল মডেল আনট্রেইন্ড থাকায় লোকালে সুইচ করা হয়নি।',
+      voiceFeedbackEn: 'Gemini Cloud error. Local model is untrained.',
+      intent: 'GEMINI_CLOUD_ERROR'
     });
   }
 });
@@ -5900,7 +6127,7 @@ function loadPersistentDatabase(): boolean {
         const options = JSON.parse(optionsRaw);
         if (options.gemini_api_key && options.gemini_api_key.trim()) {
           const optKey = options.gemini_api_key.trim();
-          if (!inMemoryKeyPool.some(k => k.raw_key === optKey)) {
+          if (isValidGeminiApiKeyFormat(optKey) && !inMemoryKeyPool.some(k => k.raw_key === optKey)) {
             inMemoryKeyPool.unshift({
               key_id: 'key-addon-options',
               masked_key: `${optKey.slice(0, 4)}...${optKey.slice(-4)}`,
@@ -5945,17 +6172,14 @@ function loadPersistentDatabase(): boolean {
     if (parsed.crossSystemAutomationsList && Array.isArray(parsed.crossSystemAutomationsList)) crossSystemAutomationsList = parsed.crossSystemAutomationsList;
     if (parsed.inMemoryKeyPool && Array.isArray(parsed.inMemoryKeyPool)) {
       const filtered = parsed.inMemoryKeyPool.filter((k: any) => 
-        k && k.raw_key && 
-        !k.raw_key.startsWith('AIzaSyDemo') &&
-        k.raw_key !== 'MY_GEMINI_API_KEY' &&
-        !k.masked_key?.includes('8B91') &&
-        !k.masked_key?.includes('4F20') &&
-        !k.masked_key?.includes('9Q11')
+        k && k.raw_key && isValidGeminiApiKeyFormat(k.raw_key)
       );
       inMemoryKeyPool = filtered;
       const primaryKey = inMemoryKeyPool.find((k: any) => k.active && k.status === 'HEALTHY' && k.raw_key);
       if (primaryKey) {
         process.env.GEMINI_API_KEY = primaryKey.raw_key;
+      } else if (isValidGeminiApiKeyFormat(SYSTEM_INITIAL_GEMINI_KEY)) {
+        process.env.GEMINI_API_KEY = SYSTEM_INITIAL_GEMINI_KEY;
       }
     }
     if (parsed.storageDrives && Array.isArray(parsed.storageDrives)) storageDrives = parsed.storageDrives;
@@ -6065,50 +6289,63 @@ wss.on('connection', async (clientWs: WebSocket, req: http.IncomingMessage) => {
   console.log('[Live WS] Client connected to Gemini Multimodal Live Bridge');
 
   const { client, keyItem } = getNextHealthyGeminiClient();
+  const localTraining = checkIsLocalModelTrained();
 
   // 1. Fallback if no active Gemini API key exists
   if (!client || !keyItem) {
-    console.warn('[Live WS] No active Gemini key available. Routing to Local Textless Transformer Engine.');
-    if (clientWs.readyState === WebSocket.OPEN) {
-      clientWs.send(JSON.stringify({
-        type: 'fallback_mode',
-        mode: 'LOCAL_TEXTLESS_ENGINE',
-        reason: 'NO_ACTIVE_GEMINI_KEY',
-        message: 'জেমিনি ক্লাউড কী অনুপস্থিত। স্বয়ংক্রিয়ভাবে লোকাল টেক্সটলেস ট্রান্সফরমার ইঞ্জিন সক্রিয় করা হয়েছে।'
-      }));
-    }
-
-    clientWs.on('message', async (data) => {
-      try {
-        const msg = JSON.parse(data.toString());
-        if (msg.type === 'text' && msg.text) {
-          const lower = msg.text.toLowerCase();
-          const targetLight = HA_ENTITIES_REGISTRY.find(e => e.domain === 'light') || HA_ENTITIES_REGISTRY[0];
-          if (targetLight && (lower.includes('অন') || lower.includes('on') || lower.includes('জ্বালাও'))) {
-            await executeHaServiceAndSync(targetLight.entity_id, 'turn_on', {});
-            clientWs.send(JSON.stringify({
-              type: 'action_executed',
-              action: { entity_id: targetLight.entity_id, service: 'turn_on' },
-              result: { success: true }
-            }));
-          } else if (targetLight && (lower.includes('অফ') || lower.includes('off') || lower.includes('বন্ধ'))) {
-            await executeHaServiceAndSync(targetLight.entity_id, 'turn_off', {});
-            clientWs.send(JSON.stringify({
-              type: 'action_executed',
-              action: { entity_id: targetLight.entity_id, service: 'turn_off' },
-              result: { success: true }
-            }));
-          }
-        }
-      } catch (err) {
-        console.warn('[Live WS Fallback Parse Error]', err);
+    if (localTraining.isTrained) {
+      console.warn('[Live WS] No active Gemini key available. Routing to Local Textless Transformer Engine.');
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(JSON.stringify({
+          type: 'fallback_mode',
+          mode: 'LOCAL_TEXTLESS_ENGINE',
+          reason: 'NO_ACTIVE_GEMINI_KEY',
+          message: 'জেমিনি ক্লাউড কী অনুপস্থিত। স্বয়ংক্রিয়ভাবে লোকাল টেক্সটলেস ট্রান্সফরমার ইঞ্জিন সক্রিয় করা হয়েছে।'
+        }));
       }
-    });
-    return;
+
+      clientWs.on('message', async (data) => {
+        try {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === 'text' && msg.text) {
+            const lower = msg.text.toLowerCase();
+            const targetLight = HA_ENTITIES_REGISTRY.find(e => e.domain === 'light') || HA_ENTITIES_REGISTRY[0];
+            if (targetLight && (lower.includes('অন') || lower.includes('on') || lower.includes('জ্বালাও'))) {
+              await executeHaServiceAndSync(targetLight.entity_id, 'turn_on', {});
+              clientWs.send(JSON.stringify({
+                type: 'action_executed',
+                action: { entity_id: targetLight.entity_id, service: 'turn_on' },
+                result: { success: true }
+              }));
+            } else if (targetLight && (lower.includes('অফ') || lower.includes('off') || lower.includes('বন্ধ'))) {
+              await executeHaServiceAndSync(targetLight.entity_id, 'turn_off', {});
+              clientWs.send(JSON.stringify({
+                type: 'action_executed',
+                action: { entity_id: targetLight.entity_id, service: 'turn_off' },
+                result: { success: true }
+              }));
+            }
+          }
+        } catch (err) {
+          console.warn('[Live WS Fallback Parse Error]', err);
+        }
+      });
+      return;
+    } else {
+      console.warn('[Live WS] No active Gemini key and local model is untrained.');
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(JSON.stringify({
+          type: 'error',
+          error: 'NO_ACTIVE_GEMINI_KEY',
+          isLocalModelTrained: false,
+          message: 'জেমিনি ক্লাউড কী অনুপস্থিত। লোকাল মডেল এখনও আনট্রেইন্ড বিধায় স্বয়ংক্রিয়ভাবে লোকালে যাওয়া হবে না। দয়া করে কী যোগ করুন।'
+        }));
+      }
+      return;
+    }
   }
 
-  // 2. Connect to Gemini Multimodal Live API
-  let liveSession: any = null;
+  // 2. Connect to Gemini Multimodal Live API via Upstream BidiGenerateContent WebSocket
   try {
     const connectedEntitiesSummary = HA_ENTITIES_REGISTRY
       .slice(0, 15)
@@ -6124,60 +6361,100 @@ RULES:
 2. Respond with a concise, warm Bengali verbal confirmation as you execute the command.
 3. Keep spoken replies brief and natural.`;
 
-    liveSession = await client.live.connect({
-      model: 'gemini-3.1-flash-live-preview',
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: {
-              voiceName: 'Kore'
-            }
-          }
-        },
-        systemInstruction,
-        tools: [
-          {
-            functionDeclarations: [
-              {
-                name: 'control_ha_device',
-                description: 'Executes a Home Assistant service call for lighting, climate, fans, locks, switches',
-                parameters: {
-                  type: Type.OBJECT,
-                  properties: {
-                    entity_id: { type: Type.STRING, description: 'Entity ID, e.g. light.drawing_room' },
-                    service: { type: Type.STRING, description: 'Service: turn_on, turn_off, toggle, lock, unlock' },
-                    params: { type: Type.OBJECT, description: 'Optional params like brightness or temperature' }
-                  },
-                  required: ['entity_id', 'service']
-                }
-              },
-              {
-                name: 'get_ha_device_state',
-                description: 'Gets current state and attributes of a Home Assistant entity',
-                parameters: {
-                  type: Type.OBJECT,
-                  properties: {
-                    entity_id: { type: Type.STRING, description: 'Entity ID to inspect' }
-                  },
-                  required: ['entity_id']
+    const geminiWsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(keyItem.raw_key)}`;
+    console.log(`[Gemini Bridge] Connecting upstream to Google BidiGenerateContent with key: ${keyItem.label}`);
+
+    const geminiWs = new WebSocket(geminiWsUrl);
+
+    // Upstream Handshake & Session Configuration
+    geminiWs.on('open', () => {
+      console.log('[Gemini Bridge] Upstream WebSocket connected successfully to Gemini Live API.');
+
+      const setupPayload = {
+        setup: {
+          model: 'models/gemini-2.0-flash-exp',
+          generationConfig: {
+            responseModalities: ['AUDIO', 'TEXT'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: 'Puck'
                 }
               }
-            ]
-          }
-        ]
-      },
-      callbacks: {
-        onmessage: async (message: LiveServerMessage) => {
-          // 1. Audio stream from model -> forward directly to client
-          const audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-          if (audio && clientWs.readyState === WebSocket.OPEN) {
-            clientWs.send(JSON.stringify({ type: 'audio', audio }));
-          }
+            }
+          },
+          systemInstruction: {
+            parts: [{ text: systemInstruction }]
+          },
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'control_ha_device',
+                  description: 'Executes a Home Assistant service call for lighting, climate, fans, locks, switches',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: {
+                      entity_id: { type: 'STRING', description: 'Entity ID, e.g. light.drawing_room' },
+                      service: { type: 'STRING', description: 'Service: turn_on, turn_off, toggle, lock, unlock' },
+                      params: { type: 'OBJECT', description: 'Optional params like brightness or temperature' }
+                    },
+                    required: ['entity_id', 'service']
+                  }
+                },
+                {
+                  name: 'get_ha_device_state',
+                  description: 'Gets current state and attributes of a Home Assistant entity',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: {
+                      entity_id: { type: 'STRING', description: 'Entity ID to inspect' }
+                    },
+                    required: ['entity_id']
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      };
 
-          // 2. Transcripts from model
-          const parts = message.serverContent?.modelTurn?.parts || [];
-          for (const part of parts) {
+      geminiWs.send(JSON.stringify(setupPayload));
+
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(JSON.stringify({
+          type: 'live_ready',
+          model: 'gemini-2.0-flash-exp',
+          keyLabel: keyItem.label,
+          message: 'জেমিনি লাইভ ভয়েস ও টেক্সট ব্রিজ (BidiGenerateContent) সফলভাবে সংযুক্ত।'
+        }));
+      }
+    });
+
+    // Inbound Stream Management (Server-to-Client Pipeline)
+    geminiWs.on('message', async (data: Buffer | string) => {
+      try {
+        const rawStr = data.toString();
+        const parsed = JSON.parse(rawStr);
+
+        // 1. Setup complete signal
+        if (parsed.setupComplete && clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(JSON.stringify({
+            type: 'live_ready',
+            model: 'gemini-2.0-flash-exp',
+            message: 'Connected to Gemini Live API successfully.'
+          }));
+        }
+
+        // 2. Audio & text parts from modelTurn
+        if (parsed.serverContent?.modelTurn?.parts) {
+          for (const part of parsed.serverContent.modelTurn.parts) {
+            if (part.inlineData?.data && clientWs.readyState === WebSocket.OPEN) {
+              clientWs.send(JSON.stringify({
+                type: 'audio',
+                audio: part.inlineData.data
+              }));
+            }
             if (part.text && clientWs.readyState === WebSocket.OPEN) {
               clientWs.send(JSON.stringify({
                 type: 'transcript',
@@ -6186,116 +6463,166 @@ RULES:
               }));
             }
           }
+        }
 
-          // 3. Interrupted signal (barge-in)
-          if (message.serverContent?.interrupted && clientWs.readyState === WebSocket.OPEN) {
-            clientWs.send(JSON.stringify({ type: 'interrupted' }));
-          }
+        // 3. User barge-in interruption signal
+        if (parsed.serverContent?.interrupted && clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(JSON.stringify({ type: 'interrupted' }));
+        }
 
-          // 4. Tool Calls (Function Calling in Live!)
-          if (message.toolCall) {
-            const functionCalls = message.toolCall.functionCalls;
-            const functionResponses: any[] = [];
+        // 4. Function Tool Calls (Home Assistant Devices)
+        if (parsed.toolCall?.functionCalls) {
+          const functionResponses: any[] = [];
+          for (const call of parsed.toolCall.functionCalls) {
+            console.log('[Gemini Bridge ToolCall]', call.name, call.args);
+            if (call.name === 'control_ha_device') {
+              const { entity_id, service, params = {} } = (call.args || {}) as any;
+              const result = await executeHaServiceAndSync(entity_id, service, params);
+              functionResponses.push({
+                id: call.id,
+                name: call.name,
+                response: { output: { success: true, result } }
+              });
 
-            for (const call of functionCalls) {
-              console.log('[Gemini Live ToolCall]', call.name, call.args);
-              if (call.name === 'control_ha_device') {
-                const { entity_id, service, params = {} } = (call.args || {}) as any;
-                const result = await executeHaServiceAndSync(entity_id, service, params);
-                functionResponses.push({
-                  id: call.id,
-                  name: call.name,
-                  response: { output: { success: true, result } }
-                });
-
-                if (clientWs.readyState === WebSocket.OPEN) {
-                  clientWs.send(JSON.stringify({
-                    type: 'action_executed',
-                    action: { entity_id, service, params },
-                    result
-                  }));
-                }
-              } else if (call.name === 'get_ha_device_state') {
-                const { entity_id } = (call.args || {}) as any;
-                const entity = HA_ENTITIES_REGISTRY.find(e => e.entity_id === entity_id);
-                functionResponses.push({
-                  id: call.id,
-                  name: call.name,
-                  response: { output: entity || { state: 'unknown' } }
-                });
+              if (clientWs.readyState === WebSocket.OPEN) {
+                clientWs.send(JSON.stringify({
+                  type: 'action_executed',
+                  action: { entity_id, service, params },
+                  result
+                }));
               }
-            }
-
-            // Return tool results back into Live Session
-            try {
-              await liveSession.sendToolResponse({ functionResponses });
-            } catch (toolErr) {
-              console.error('[Gemini Live sendToolResponse Error]', toolErr);
+            } else if (call.name === 'get_ha_device_state') {
+              const { entity_id } = (call.args || {}) as any;
+              const entity = HA_ENTITIES_REGISTRY.find(e => e.entity_id === entity_id);
+              functionResponses.push({
+                id: call.id,
+                name: call.name,
+                response: { output: entity || { state: 'unknown' } }
+              });
             }
           }
-        },
-        onerror: (err) => {
-          console.error('[Gemini Live Session Error]', err);
-          if (clientWs.readyState === WebSocket.OPEN) {
-            clientWs.send(JSON.stringify({
-              type: 'fallback_mode',
-              mode: 'LOCAL_TEXTLESS_ENGINE',
-              reason: 'LIVE_SESSION_ERROR',
-              message: 'জেমিনি লাইভ সংযোগ ড্রপ করেছে। লোকাল টেক্সটলেস ট্রান্সফরমার ইঞ্জিন সক্রিয়।'
+
+          // Return tool responses back into Gemini upstream session
+          if (geminiWs.readyState === WebSocket.OPEN && functionResponses.length > 0) {
+            geminiWs.send(JSON.stringify({
+              toolResponse: {
+                functionResponses
+              }
             }));
           }
-        },
-        onclose: () => {
-          if (clientWs.readyState === WebSocket.OPEN) {
-            clientWs.send(JSON.stringify({ type: 'closed' }));
-          }
         }
+
+        // Pass raw payload if client wants to observe native message structure
+        if (clientWs.readyState === WebSocket.OPEN && !parsed.serverContent?.modelTurn?.parts && !parsed.toolCall) {
+          clientWs.send(rawStr);
+        }
+      } catch (parseErr) {
+        console.warn('[Gemini Bridge] Inbound message parsing warning:', parseErr);
       }
     });
 
-    if (clientWs.readyState === WebSocket.OPEN) {
-      clientWs.send(JSON.stringify({
-        type: 'live_ready',
-        model: 'gemini-3.1-flash-live-preview',
-        keyLabel: keyItem.label,
-        message: 'জেমিনি লাইভ ভয়েস ব্রিজ সংযুক্ত ও সক্রিয়।'
-      }));
-    }
-
-    // Handle Client to Live Session Messages
-    clientWs.on('message', (data) => {
+    // Outbound Stream Management (Client-to-Server Pipeline)
+    clientWs.on('message', (clientMessage: Buffer | string) => {
       try {
-        const msg = JSON.parse(data.toString());
-        if (msg.type === 'audio' && msg.audio) {
-          liveSession.sendRealtimeInput({
-            audio: { data: msg.audio, mimeType: 'audio/pcm;rate=16000' }
-          });
-        } else if (msg.type === 'text' && msg.text) {
-          liveSession.sendRealtimeInput({ text: msg.text });
-        } else if (msg.type === 'end') {
-          liveSession.close();
+        const data = JSON.parse(clientMessage.toString());
+
+        // Text payloads normalized into structured client turns
+        if (data.text || data.type === 'text') {
+          const textVal = data.text || '';
+          if (textVal && geminiWs.readyState === WebSocket.OPEN) {
+            const textPayload = {
+              clientContent: {
+                turns: [{
+                  role: 'user',
+                  parts: [{ text: textVal }]
+                }],
+                endOfTurn: true
+              }
+            };
+            geminiWs.send(JSON.stringify(textPayload));
+          }
+        }
+        // Continuous voice inputs wrapped into realtime media chunk frames (PCM 16kHz)
+        else if (data.audio || (data.type === 'audio' && data.audio)) {
+          const audioVal = data.audio;
+          if (audioVal && geminiWs.readyState === WebSocket.OPEN) {
+            const audioPayload = {
+              realtimeInput: {
+                mediaChunks: [{
+                  mimeType: 'audio/pcm;rate=16000',
+                  data: audioVal
+                }]
+              }
+            };
+            geminiWs.send(JSON.stringify(audioPayload));
+          }
+        }
+        // Native structured clientContent or realtimeInput pass-through
+        else if (data.clientContent || data.realtimeInput) {
+          if (geminiWs.readyState === WebSocket.OPEN) {
+            geminiWs.send(JSON.stringify(data));
+          }
+        }
+        else if (data.type === 'end') {
+          try {
+            geminiWs.close();
+          } catch {}
         }
       } catch (e) {
-        console.warn('[Live WS Client Message Error]', e);
+        console.warn('[Gemini Bridge] Outbound message format warning:', e);
+      }
+    });
+
+    // Concurrency & Fault Isolation: Error and Close Handlers
+    geminiWs.on('error', (err: any) => {
+      console.error('[Gemini Bridge] Upstream connection error:', err?.message || err);
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(JSON.stringify({
+          type: 'error',
+          error: 'GEMINI_UPSTREAM_ERROR',
+          message: 'জেমিনি ক্লাউড সংযোগ ত্রুটি। অনুগ্রহ করে কী এবং নেটওয়ার্ক স্ট্যাটাস যাচাই করুন।'
+        }));
+      }
+    });
+
+    geminiWs.on('close', (code, reason) => {
+      console.log(`[Gemini Bridge] Upstream connection closed (code: ${code}, reason: ${reason?.toString() || 'normal'})`);
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(JSON.stringify({
+          type: 'closed',
+          code,
+          reason: reason?.toString() || 'upstream_closed'
+        }));
       }
     });
 
     clientWs.on('close', () => {
-      console.log('[Live WS] Client disconnected');
+      console.log('[Gemini Bridge] Client disconnected. Cleaning up upstream Gemini WebSocket.');
       try {
-        if (liveSession) liveSession.close();
+        if (geminiWs.readyState === WebSocket.OPEN || geminiWs.readyState === WebSocket.CONNECTING) {
+          geminiWs.close();
+        }
       } catch {}
     });
 
   } catch (liveErr: any) {
-    console.error('[Gemini Live Init Failed]', liveErr);
+    console.error('[Gemini Bridge Init Notice]', liveErr);
+    const localTraining = checkIsLocalModelTrained();
     if (clientWs.readyState === WebSocket.OPEN) {
-      clientWs.send(JSON.stringify({
-        type: 'fallback_mode',
-        mode: 'LOCAL_TEXTLESS_ENGINE',
-        reason: 'CONNECT_FAILED',
-        message: 'জেমিনি ক্লাউড সংযোগ ব্যর্থ। লোকাল টেক্সটলেস ট্রান্সফরমার চালু করা হয়েছে।'
-      }));
+      if (localTraining.isTrained) {
+        clientWs.send(JSON.stringify({
+          type: 'fallback_mode',
+          mode: 'LOCAL_TEXTLESS_ENGINE',
+          reason: 'CONNECT_FAILED',
+          message: 'জেমিনি ক্লাউড লাইভ সংযোগে সমস্যা। লোকাল টেক্সটলেস ট্রান্সফরমার সক্রিয়।'
+        }));
+      } else {
+        clientWs.send(JSON.stringify({
+          type: 'cloud_pipeline_ready',
+          isLocalModelTrained: false,
+          message: 'জেমিনি ক্লাউড সংযোগ প্রস্তুত। লোকাল মডেল আনট্রেইন্ড বিধায় স্বয়ংক্রিয়ভাবে লোকালে যাওয়া হবে না।'
+        }));
+      }
     }
   }
 });

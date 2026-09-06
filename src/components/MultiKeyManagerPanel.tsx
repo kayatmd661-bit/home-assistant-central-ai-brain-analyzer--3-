@@ -19,23 +19,16 @@ import {
 } from 'lucide-react';
 import { PageVoiceExplainerBar } from './PageVoiceExplainerBar';
 import { useVoiceSettings } from '../context/VoiceSettingsContext';
-import { fetchGeminiKeys, addGeminiKey, toggleGeminiKey, deleteGeminiKey, testGeminiKey } from '../services/api';
+import { 
+  fetchGeminiKeyPool as fetchGeminiKeys, 
+  addGeminiKeyToPool as addGeminiKey, 
+  toggleGeminiKeyActive as toggleGeminiKey, 
+  deleteGeminiKeyFromPool as deleteGeminiKey, 
+  testGeminiKeyLatency as testGeminiKey,
+  GeminiKeyItem
+} from '../services/geminiPipeline';
 
-interface GeminiKeyItem {
-  key_id: string;
-  masked_key: string;
-  raw_key?: string;
-  label: string;
-  active: boolean;
-  status: 'HEALTHY' | 'RATE_LIMITED' | 'EXHAUSTED' | 'INVALID';
-  last_used: string;
-  request_count: number;
-  error_count: number;
-  avg_latency_ms: number;
-  is_rate_limited?: boolean;
-}
-
-export const MultiKeyManagerPanel: React.FC = () => {
+export const MultiKeyManagerPanel: React.FC<{ onNavigateToMain?: () => void }> = ({ onNavigateToMain }) => {
   const { speakText } = useVoiceSettings();
 
   const [keys, setKeys] = useState<GeminiKeyItem[]>([]);
@@ -180,6 +173,29 @@ export const MultiKeyManagerPanel: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Centralized Architecture Notice Banner */}
+      {onNavigateToMain && (
+        <div className="p-4 rounded-2xl bg-cyan-950/70 border border-cyan-700/80 shadow-lg flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="w-5 h-5 text-cyan-400 shrink-0" />
+            <div>
+              <div className="text-sm font-bold text-white">
+                সেন্ট্রালাইজড আর্কিটেকচার সক্রিয় (Unified Gemini Architecture)
+              </div>
+              <div className="text-xs text-cyan-200/90">
+                সমস্ত এপিআই কী ও লাইভ ভয়েস পাইপলাইন এখন সরাসরি মেইন ল্যান্ডিং পেজেও সংযুক্ত। আপনি যেকোনো স্থান থেকে একই সাথে পরিচালনা করতে পারবেন।
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onNavigateToMain}
+            className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold font-sans shadow-md shadow-cyan-600/30 transition-all active:scale-95"
+          >
+            🏠 মেইন পেজে ম্যানেজ করুন
+          </button>
+        </div>
+      )}
+
       {/* On-Page Voice Explainer Guide */}
       <PageVoiceExplainerBar pageId="key_manager" />
 

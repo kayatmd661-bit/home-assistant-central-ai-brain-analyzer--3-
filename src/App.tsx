@@ -242,7 +242,7 @@ function MainHubApp() {
                 />
               )}
               {activeTab === 'key_manager' && (
-                <MultiKeyManagerPanel />
+                <MultiKeyManagerPanel onNavigateToMain={() => setActiveTab('voice_landing')} />
               )}
               {activeTab === 'auto_install' && (
                 <LovelaceAutoInstallerPanel
