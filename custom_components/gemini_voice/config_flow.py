@@ -1,11 +1,8 @@
-
 """Config flow for Gemini Multimodal Voice Engine integration."""
 
 import logging
 from typing import Any
 
-from google import genai
-from google.genai import errors
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -38,15 +35,16 @@ class GeminiVoiceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
+                from google import genai
+                from google.genai import errors
+
                 client = genai.Client(api_key=user_input[CONF_API_KEY])
                 await self.hass.async_add_executor_job(
                     client.models.get,
                     {"model": user_input.get(CONF_MODEL, DEFAULT_MODEL)},
                 )
-            except errors.APIError:
-                errors_dict["base"] = "invalid_auth"
-            except Exception:
-                _LOGGER.exception("Unexpected exception during API key validation")
+            except Exception as err:
+                _LOGGER.error("Error validating Gemini API Key: %s", err)
                 errors_dict["base"] = "cannot_connect"
             else:
                 return self.async_create_entry(
@@ -82,7 +80,8 @@ class GeminiVoiceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class GeminiVoiceOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for Gemini Multimodal Voice Engine."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:"""Initialize options flow."""
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
         self.config_entry = config_entry
 
     async def async_step_init(
