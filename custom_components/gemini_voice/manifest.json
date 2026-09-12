@@ -1,1 +1,15 @@
 
+{
+  "domain": "gemini_voice",
+  "name": "Gemini Multimodal Voice Engine",
+  "codeowners": ["@humayun"],
+  "config_flow": true,
+  "documentation": "https://github.com/custom_components/gemini_voice",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/custom_components/gemini_voice/issues",
+  "requirements": [
+    "google-genai>=0.1.1"
+  ],
+  "version": "1.0.0"
+}
