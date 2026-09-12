@@ -1,1 +1,31 @@
-
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configure Gemini Multimodal Voice Engine",
+        "description": "Enter your Google Gemini API Key and default preferences.",
+        "data": {
+          "api_key": "API Key",
+          "model": "Model",
+          "system_prompt": "System Prompt"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Google Gemini API.",
+      "invalid_auth": "Invalid API Key provided.",
+      "unknown": "An unexpected error occurred."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Gemini Voice Options",
+        "data": {
+          "model": "Model",
+          "system_prompt": "System Prompt"
+        }
+      }
+    }
+  }
+}
